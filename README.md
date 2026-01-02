@@ -1,3 +1,3 @@
-# fastApi
-
-this is fastAPi
+# Website for weather station (park Administrators
+## Backend
+the backend is basically python (fastapi) 
