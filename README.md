@@ -1,4 +1,6 @@
 # 🌦️ IoT Weather Forecast - Park Administration System
+<img width="1337" height="504" alt="image" src="https://github.com/user-attachments/assets/076df49d-3e28-40ac-bf36-88c5d23ed27f" />
+
 
 This repository contains a full-stack solution for a specialized weather station system designed for Park Administrators. It features a **FastAPI** backend for processing IoT sensor data and a **Vue.js** frontend for real-time visualization.
 
