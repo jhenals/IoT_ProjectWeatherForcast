@@ -3,6 +3,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import AppShell from '../components/layout/AppShell.vue'
 import SensorPanel from '../components/sensors/SensorPanel.vue'
+import RagChatbot from '../components/RagChatbot.vue'
 
 const devices = ref([]) // Array to store all device readings
 const error = ref('')
@@ -67,21 +68,25 @@ async function loadLatest() {
   }
 }
 
-// Load detailed device information
+// Load detailed device information for specific device only
 async function loadDeviceDetails(deviceId) {
   try {
     detailLoading.value = true
     
-    // Fetch device history for the last 24 hours
-    const res = await fetch(`${API_BASE}/api/weather/forecast/?device_id=${deviceId}&minutes=1440`)
+    // Fetch device history for the last 1 hour for this specific device only
+    const res = await fetch(`${API_BASE}/api/weather/forecast/?device_id=${deviceId}&minutes=60`)
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
     const data = await res.json()
     
-    deviceHistory.value = data.map(reading => ({
+    // Filter to ensure we only have data for this specific device
+    const filteredData = data.filter(reading => reading.device_id === deviceId)
+    
+    deviceHistory.value = filteredData.map(reading => ({
       time: reading.time ? new Date(reading.time).toLocaleString() : '—',
       temperature: reading.temperature ?? '—',
       humidity: reading.humidity ?? '—',
-      pressure: reading.pressure ?? '—'
+      pressure: reading.pressure ?? '—',
+      deviceId: reading.device_id
     })).reverse() // Most recent first
     
   } catch (e) {
@@ -295,6 +300,9 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <!-- RAG Chatbot Component -->
+    <RagChatbot />
+
     <!-- Detail Modal -->
     <div 
       v-if="showDetailModal" 
@@ -355,7 +363,7 @@ onUnmounted(() => {
             <!-- Historical Data -->
             <div class="card bg-black bg-opacity-25 border-secondary">
               <div class="card-header bg-black bg-opacity-50 border-secondary d-flex justify-content-between align-items-center">
-                <h6 class="mb-0">Historical Data (Last 24 Hours)</h6>
+                <h6 class="mb-0">Historical Data (Last 1 Hour) - Device ID: {{ selectedDevice?.deviceId }}</h6>
                 <button 
                   class="btn btn-sm btn-outline-primary"
                   @click="loadDeviceDetails(selectedDevice?.deviceId)"

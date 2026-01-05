@@ -14,7 +14,7 @@ defineProps({
   formatValue: { type: Function, required: true },
 })
 
-const emit = defineEmits(['refresh'])
+const emit = defineEmits(['Detail'])
 </script>
 
 <template>
@@ -41,11 +41,11 @@ const emit = defineEmits(['refresh'])
         
         <button 
           class="btn btn-outline-light btn-sm rounded-pill px-3" 
-          @click="emit('refresh')"
+          @click="emit('Detail')"
           :disabled="loading"
         >
           <i class="bi bi-arrow-clockwise me-1" :class="{ 'spinner': loading }"></i>
-          Refresh
+          Detail
         </button>
       </div>
 
@@ -140,7 +140,7 @@ const emit = defineEmits(['refresh'])
             <p class="mb-0 small mt-1">{{ error }}</p>
           </div>
         </div>
-        <button type="button" class="btn-close" @click="$emit('refresh')" aria-label="Retry"></button>
+        <button type="button" class="btn-close" @click="$emit('Detail')" aria-label="Retry"></button>
       </div>
     </div>
   </div>
