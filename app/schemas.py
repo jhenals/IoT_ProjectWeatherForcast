@@ -8,4 +8,4 @@ class WeatherPoint(BaseModel):
     temperature: Optional[float] = None
     humidity: Optional[float] = None
     pressure: Optional[float] = None
-    wind_speed: Optional[float] = None
+    light_intensity: Optional[float] = None
