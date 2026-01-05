@@ -1,4 +1,4 @@
-// SensorDashboardPage.vue - Updated with Search Validation
+// SensorDashboardPage.vue - Updated with Detail Modal
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import AppShell from '../components/layout/AppShell.vue'
@@ -10,6 +10,10 @@ const loading = ref(false)
 const searchQuery = ref('')
 const searchAttempted = ref(false)
 const notFoundMessage = ref('')
+const showDetailModal = ref(false)
+const selectedDevice = ref(null)
+const detailLoading = ref(false)
+const deviceHistory = ref([])
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 let timer = null
@@ -63,6 +67,45 @@ async function loadLatest() {
   }
 }
 
+// Load detailed device information
+async function loadDeviceDetails(deviceId) {
+  try {
+    detailLoading.value = true
+    
+    // Fetch device history for the last 24 hours
+    const res = await fetch(`${API_BASE}/api/weather/forecast/?device_id=${deviceId}&minutes=1440`)
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+    const data = await res.json()
+    
+    deviceHistory.value = data.map(reading => ({
+      time: reading.time ? new Date(reading.time).toLocaleString() : '—',
+      temperature: reading.temperature ?? '—',
+      humidity: reading.humidity ?? '—',
+      pressure: reading.pressure ?? '—'
+    })).reverse() // Most recent first
+    
+  } catch (e) {
+    console.error('Error loading device details:', e)
+    deviceHistory.value = []
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+// Show detail modal
+async function showDetails(device) {
+  selectedDevice.value = device
+  showDetailModal.value = true
+  await loadDeviceDetails(device.deviceId)
+}
+
+// Close modal
+function closeModal() {
+  showDetailModal.value = false
+  selectedDevice.value = null
+  deviceHistory.value = []
+}
+
 // Filter devices based on search query
 const filteredDevices = computed(() => {
   if (!searchQuery.value.trim()) {
@@ -80,7 +123,6 @@ function handleSearch() {
   notFoundMessage.value = ''
   
   if (!searchQuery.value.trim()) {
-    // If search is empty, show all devices
     searchAttempted.value = false
     return
   }
@@ -93,13 +135,10 @@ function handleSearch() {
   
   if (!found) {
     notFoundMessage.value = `Device ID "${searchQuery.value}" does not exist`
-    // Auto-hide message after 5 seconds
     setTimeout(() => {
       notFoundMessage.value = ''
     }, 5000)
   }
-  
-  console.log('Searching for:', searchQuery.value, 'Found:', found)
 }
 
 function clearSearch() {
@@ -240,7 +279,8 @@ onUnmounted(() => {
           :loading="loading"
           :error="error"
           :format-value="formatValue"
-          @refresh="loadLatest"
+          @refresh="showDetails(device)"
+          @click="showDetails(device)"
         />
       </div>
     </div>
@@ -254,6 +294,119 @@ onUnmounted(() => {
         Updating...
       </div>
     </div>
+
+    <!-- Detail Modal -->
+    <div 
+      v-if="showDetailModal" 
+      class="modal fade show d-block" 
+      tabindex="-1" 
+      style="background-color: rgba(0,0,0,0.5);"
+      @click.self="closeModal"
+    >
+      <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content bg-dark text-white">
+          <div class="modal-header border-secondary">
+            <h5 class="modal-title">
+              <i class="bi bi-info-circle me-2"></i>
+              Device Details: {{ selectedDevice?.deviceId }}
+            </h5>
+            <button type="button" class="btn-close btn-close-white" @click="closeModal"></button>
+          </div>
+          <div class="modal-body">
+            <!-- Current Readings -->
+            <div class="card bg-black bg-opacity-25 border-secondary mb-4">
+              <div class="card-header bg-black bg-opacity-50 border-secondary">
+                <h6 class="mb-0">Current Readings</h6>
+              </div>
+              <div class="card-body">
+                <div class="row g-3">
+                  <div class="col-md-4">
+                    <div class="d-flex flex-column">
+                      <small class="text-secondary mb-1">Temperature</small>
+                      <strong class="fs-4 text-warning">
+                        {{ formatValue(selectedDevice?.temperature, '°C') }}
+                      </strong>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="d-flex flex-column">
+                      <small class="text-secondary mb-1">Humidity</small>
+                      <strong class="fs-4 text-info">
+                        {{ formatValue(selectedDevice?.humidity, '%') }}
+                      </strong>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="d-flex flex-column">
+                      <small class="text-secondary mb-1">Pressure</small>
+                      <strong class="fs-4 text-success">
+                        {{ formatValue(selectedDevice?.pressure, 'hPa') }}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+                <div class="mt-3 pt-3 border-top border-secondary">
+                  <small class="text-secondary">Last Updated:</small>
+                  <div class="text-white">{{ selectedDevice?.observedAt }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Historical Data -->
+            <div class="card bg-black bg-opacity-25 border-secondary">
+              <div class="card-header bg-black bg-opacity-50 border-secondary d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">Historical Data (Last 24 Hours)</h6>
+                <button 
+                  class="btn btn-sm btn-outline-primary"
+                  @click="loadDeviceDetails(selectedDevice?.deviceId)"
+                  :disabled="detailLoading"
+                >
+                  <i class="bi bi-arrow-clockwise" :class="{ 'spinner-border spinner-border-sm': detailLoading }"></i>
+                  {{ detailLoading ? '' : 'Refresh' }}
+                </button>
+              </div>
+              <div class="card-body p-0">
+                <div v-if="detailLoading" class="text-center py-4">
+                  <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                  </div>
+                  <p class="text-secondary mt-2">Loading history...</p>
+                </div>
+                
+                <div v-else-if="deviceHistory.length === 0" class="text-center py-4 text-secondary">
+                  <i class="bi bi-inbox fs-3"></i>
+                  <p class="mt-2">No historical data available</p>
+                </div>
+
+                <div v-else class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                  <table class="table table-dark table-striped table-hover mb-0">
+                    <thead class="sticky-top bg-dark">
+                      <tr>
+                        <th>Time</th>
+                        <th>Temperature</th>
+                        <th>Humidity</th>
+                        <th>Pressure</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(reading, index) in deviceHistory" :key="index">
+                        <td class="text-secondary">{{ reading.time }}</td>
+                        <td class="text-warning">{{ formatValue(reading.temperature, '°C') }}</td>
+                        <td class="text-info">{{ formatValue(reading.humidity, '%') }}</td>
+                        <td class="text-success">{{ formatValue(reading.pressure, 'hPa') }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer border-secondary">
+            <button type="button" class="btn btn-secondary" @click="closeModal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </AppShell>
 </template>
 
@@ -261,5 +414,26 @@ onUnmounted(() => {
 .row {
   --bs-gutter-x: 1rem;
   --bs-gutter-y: 1rem;
+}
+
+.modal {
+  display: block;
+}
+
+.table-responsive::-webkit-scrollbar {
+  width: 8px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+  background: #212529;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+  background: #495057;
+  border-radius: 4px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+  background: #6c757d;
 }
 </style>

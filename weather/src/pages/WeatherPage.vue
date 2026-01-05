@@ -3,7 +3,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 const searchQuery = ref('')
-const currentLocation = ref('Rende, Calabria, Italy')
+const currentLocation = ref('Unical, Rende, Calabria, Italy')
 const currentTime = ref('')
 const loading = ref(false)
 const error = ref('')
