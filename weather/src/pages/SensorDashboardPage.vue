@@ -46,7 +46,7 @@ async function loadLatest() {
           deviceId: deviceId,
           temperature: reading.temperature ?? '—',
           humidity: reading.humidity ?? '—',
-          pressure: reading.pressure ?? '—',
+          pressure: reading.pressure ? (reading.pressure / 1000).toFixed(2) : '—',
           light: reading.light ?? '—',
           noise: reading.noise ?? '—',
           tof: reading.tof ?? '—',
@@ -380,7 +380,7 @@ onUnmounted(() => {
                     <div class="d-flex flex-column">
                       <small class="text-secondary mb-1">Pressure</small>
                       <strong class="fs-4 text-success">
-                        {{ formatValue(selectedDevice?.pressure, 'hPa') }}
+                        {{ formatValue(selectedDevice?.pressure, 'kPa') }}
                       </strong>
                     </div>
                   </div>
@@ -469,7 +469,7 @@ onUnmounted(() => {
                         <td class="text-secondary">{{ reading.time }}</td>
                         <td class="text-warning">{{ formatValue(reading.temperature, '°C') }}</td>
                         <td class="text-info">{{ formatValue(reading.humidity, '%') }}</td>
-                        <td class="text-success">{{ formatValue(reading.pressure, 'hPa') }}</td>
+                        <td class="text-success">{{ formatValue(reading.pressure / 1000, 'kPa') }}</td>
                         <td class="text-warning">{{ formatValue(reading.light, 'lx') }}</td>
                         <td class="text-info">{{ formatValue(reading.noise, 'dB') }}</td>
                         <td class="text-success">{{ formatValue(reading.tof, 'cm') }}</td>

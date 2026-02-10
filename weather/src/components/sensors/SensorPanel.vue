@@ -121,7 +121,7 @@ const emit = defineEmits(['Detail'])
                   <span class="text-white-50 small text-uppercase fw-semibold letter-spacing">Pressure</span>
                 </div>
                 <div class="display-6 fw-bold">
-                  {{ formatValue(pressure, 'hPa') }}
+                  {{ formatValue(pressure, 'kPa') }}
                 </div>
               </div>
               <div class="metric-icon">
