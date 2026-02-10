@@ -34,11 +34,6 @@ const weatherData = ref({
 const nearbyLocations = ref([])
 
 // Available measurements
-const availableMeasurements = [
-  { measurement: 'Sensor_S6000U_data1', device_id: 101 },
-  { measurement: 'Sensor_S6000U_data2', device_id: 102 },
-  { measurement: 'Sensor_S6000U_data3', device_id: 103 },
-]
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 let timer = null
@@ -424,7 +419,7 @@ onUnmounted(() => {
     <div class="container-fluid">
       <div class="row g-3">
         <!-- Left Column - Weather Details -->
-        <div class="col-lg-8">
+        <div class="col-lg-6">
           <div class="card shadow-sm">
             <div class="card-body">
               <!-- Header -->
@@ -526,7 +521,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Right Column - Map -->
-        <div class="col-lg-4">
+        <div class="col-lg-6">
           <!-- Map Controls -->
           <div class="card shadow-sm mb-3">
             <div class="card-body p-2">
