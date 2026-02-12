@@ -1,6 +1,8 @@
-<!-- S6000Dashboard.vue - Refined Grafana-like S6000 Sensor Dashboard -->
+<!-- S6000Dashboard.vue - Enhanced with Leaflet Map and Chart Axes -->
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 
 /* -----------------------
  * Constants
@@ -8,7 +10,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 const SVG_WIDTH = 720
 const SVG_HEIGHT = 220
-const PADDING = { left: 50, right: 30, top: 20, bottom: 30 }
+const PADDING = { left: 60, right: 30, top: 20, bottom: 50 }
 const INNER_WIDTH = SVG_WIDTH - PADDING.left - PADDING.right
 const INNER_HEIGHT = SVG_HEIGHT - PADDING.top - PADDING.bottom
 const GAUGE_CIRCUMFERENCE = 2 * Math.PI * 70
@@ -39,11 +41,14 @@ const currentReadings = ref({
   distance: 50,
   tilt: 10,
   noise: 55,
-  gps: { latitude: 39.0, longitude: 16.0 }
+  gps: { latitude: 39.0742, longitude: 16.3027 }
 })
 
 const hoveredPoint = ref(null)
 let refreshTimer = null
+let map = null
+let marker = null
+const mapContainer = ref(null)
 
 /* -----------------------
  * Utility Functions
@@ -59,6 +64,17 @@ const formatTimestamp = (ts) => {
       hour: '2-digit', 
       minute: '2-digit',
       second: '2-digit'
+    })
+  } catch {
+    return ''
+  }
+}
+
+const formatShortTime = (ts) => {
+  try {
+    return new Date(ts).toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit'
     })
   } catch {
     return ''
@@ -83,8 +99,122 @@ const yForValue = (v, min, max) => {
 }
 
 /* -----------------------
+ * Axis Helpers
+ * -----------------------*/
+const getTimeLabels = computed(() => {
+  const len = sensorData.value.length
+  if (len === 0) return []
+  
+  const labels = []
+  const step = Math.max(1, Math.floor(len / 6))
+  
+  for (let i = 0; i < len; i += step) {
+    const data = sensorData.value[i]
+    labels.push({
+      x: xForIndex(i, len),
+      text: formatShortTime(data.time)
+    })
+  }
+  
+  // Always add last point
+  if (len > 1) {
+    const lastData = sensorData.value[len - 1]
+    labels.push({
+      x: xForIndex(len - 1, len),
+      text: formatShortTime(lastData.time)
+    })
+  }
+  
+  return labels
+})
+
+const getYAxisLabels = (min, max, unit = '') => {
+  const range = max - min
+  const step = range / 5
+  const labels = []
+  
+  for (let i = 0; i <= 5; i++) {
+    const value = min + (step * i)
+    const y = PADDING.top + INNER_HEIGHT - (INNER_HEIGHT * i / 5)
+    labels.push({
+      y,
+      text: value.toFixed(1) + unit
+    })
+  }
+  
+  return labels
+}
+
+const temperatureYLabels = computed(() => 
+  getYAxisLabels(minTemperature.value, maxTemperature.value, '°C')
+)
+
+const humidityYLabels = computed(() => 
+  getYAxisLabels(minHumidity.value, maxHumidity.value, '%')
+)
+
+const noiseYLabels = computed(() => 
+  getYAxisLabels(minNoise.value, maxNoise.value, 'dB')
+)
+
+/* -----------------------
+ * Leaflet Map Functions
+ * -----------------------*/
+const initMap = () => {
+  if (!mapContainer.value) return
+  
+  // Destroy existing map if any
+  if (map) {
+    map.remove()
+    map = null
+  }
+  
+  // Create map centered on Quattromiglia, Calabria
+  map = L.map(mapContainer.value).setView(
+    [currentReadings.value.gps.latitude, currentReadings.value.gps.longitude], 
+    14
+  )
+  
+  // Add OpenStreetMap tiles
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    maxZoom: 19
+  }).addTo(map)
+  
+  // Add marker
+  marker = L.marker([
+    currentReadings.value.gps.latitude, 
+    currentReadings.value.gps.longitude
+  ]).addTo(map)
+  
+  marker.bindPopup(`
+    <b>S6000 Sensor</b><br>
+    Lat: ${currentReadings.value.gps.latitude.toFixed(6)}<br>
+    Lon: ${currentReadings.value.gps.longitude.toFixed(6)}
+  `)
+}
+
+const updateMapMarker = () => {
+  if (!map || !marker) return
+  
+  const newLatLng = [
+    currentReadings.value.gps.latitude, 
+    currentReadings.value.gps.longitude
+  ]
+  
+  marker.setLatLng(newLatLng)
+  marker.setPopupContent(`
+    <b>S6000 Sensor</b><br>
+    Lat: ${currentReadings.value.gps.latitude.toFixed(6)}<br>
+    Lon: ${currentReadings.value.gps.longitude.toFixed(6)}
+  `)
+  
+  map.setView(newLatLng, map.getZoom())
+}
+
+/* -----------------------
  * Data Fetching
- * --------------------- */
+ * -----------------------*/
 const fetchSensorData = async () => {
   loading.value = true
   error.value = ''
@@ -149,11 +279,16 @@ const updateCurrentReadings = (data) => {
       ? { latitude: latest.latitude, longitude: latest.longitude }
       : currentReadings.value.gps
   }
+  
+  // Update map marker if GPS coordinates changed
+  if (map && marker) {
+    updateMapMarker()
+  }
 }
 
 /* -----------------------
  * Simulated Data (Fallback)
- * --------------------- */
+ * -----------------------*/
 const generateSimulatedData = () => {
   const now = Date.now()
   const minutes = minutesForRange(timeRange.value)
@@ -170,8 +305,8 @@ const generateSimulatedData = () => {
     vibrAccX: Math.random() * 2 - 1,
     vibrAccY: Math.random() * 2 - 1,
     vibrAccZ: Math.random() * 2 - 1,
-    latitude: 39 + (Math.random() - 0.5) * 0.01,
-    longitude: 16 + (Math.random() - 0.5) * 0.01
+    latitude: 39.0742 + (Math.random() - 0.5) * 0.01,
+    longitude: 16.3027 + (Math.random() - 0.5) * 0.01
   }))
 
   updateCurrentReadings(sensorData.value)
@@ -179,7 +314,7 @@ const generateSimulatedData = () => {
 
 /* -----------------------
  * Statistical Computations
- * --------------------- */
+ * -----------------------*/
 const calculateStat = (key, operation) => {
   const values = sensorData.value
     .map(d => d[key])
@@ -219,7 +354,7 @@ const maxNoise = computed(() => calculateStat('noise', 'max'))
 
 /* -----------------------
  * Chart Series Builders
- * --------------------- */
+ * -----------------------*/
 const buildSeries = (key, minValue, maxValue) => {
   const len = sensorData.value.length
   const points = []
@@ -323,11 +458,6 @@ const s6000Position = computed(() => {
   return minPos + (maxPos - minPos) * normalized
 })
 
-const markerPosition = computed(() => ({
-  x: 50 + (currentReadings.value.gps.longitude - 16) * 5000,
-  y: 50 - (currentReadings.value.gps.latitude - 39) * 5000
-}))
-
 /* -----------------------
  * Auto-refresh Timer
  * -----------------------*/
@@ -366,10 +496,16 @@ watch([selectedDevice, timeRange], fetchSensorData)
 onMounted(() => {
   fetchSensorData()
   startRefreshTimer()
+  // Initialize map after a short delay to ensure container is rendered
+  setTimeout(initMap, 100)
 })
 
 onBeforeUnmount(() => {
   stopRefreshTimer()
+  if (map) {
+    map.remove()
+    map = null
+  }
 })
 </script>
 
@@ -520,6 +656,56 @@ onBeforeUnmount(() => {
               stroke-width="2"
             />
 
+            <!-- Y-axis labels (Temperature - left side) -->
+            <g>
+              <text
+                v-for="(label, i) in temperatureYLabels"
+                :key="`temp-y-${i}`"
+                :x="PADDING.left - 10"
+                :y="label.y"
+                text-anchor="end"
+                alignment-baseline="middle"
+                fill="#ff9b3d"
+                font-size="10"
+                font-weight="600"
+              >
+                {{ label.text }}
+              </text>
+            </g>
+
+            <!-- Y-axis labels (Humidity - right side) -->
+            <g>
+              <text
+                v-for="(label, i) in humidityYLabels"
+                :key="`hum-y-${i}`"
+                :x="PADDING.left + INNER_WIDTH + 10"
+                :y="label.y"
+                text-anchor="start"
+                alignment-baseline="middle"
+                fill="#3d9fff"
+                font-size="10"
+                font-weight="600"
+              >
+                {{ label.text }}
+              </text>
+            </g>
+
+            <!-- X-axis labels (Time) -->
+            <g>
+              <text
+                v-for="(label, i) in getTimeLabels"
+                :key="`time-${i}`"
+                :x="label.x"
+                :y="PADDING.top + INNER_HEIGHT + 20"
+                text-anchor="middle"
+                fill="#94a3b8"
+                font-size="9"
+                font-weight="600"
+              >
+                {{ label.text }}
+              </text>
+            </g>
+
             <!-- Temperature Line -->
             <polyline
               v-if="temperatureSeries.length"
@@ -569,6 +755,43 @@ onBeforeUnmount(() => {
             >
               <title>{{ p.v?.toFixed(1) }}%</title>
             </circle>
+
+            <!-- Y-axis label text -->
+            <text
+              :x="PADDING.left - 45"
+              :y="PADDING.top + INNER_HEIGHT / 2"
+              text-anchor="middle"
+              fill="#ff9b3d"
+              font-size="11"
+              font-weight="700"
+              transform="rotate(-90, 15, 120)"
+            >
+              Temperature (°C)
+            </text>
+
+            <text
+              :x="PADDING.left + INNER_WIDTH + 45"
+              :y="PADDING.top + INNER_HEIGHT / 2"
+              text-anchor="middle"
+              fill="#3d9fff"
+              font-size="11"
+              font-weight="700"
+              transform="rotate(90, 705, 120)"
+            >
+              Humidity (%)
+            </text>
+
+            <!-- X-axis label -->
+            <text
+              :x="PADDING.left + INNER_WIDTH / 2"
+              :y="PADDING.top + INNER_HEIGHT + 40"
+              text-anchor="middle"
+              fill="#94a3b8"
+              font-size="11"
+              font-weight="700"
+            >
+              Time
+            </text>
           </svg>
 
           <div v-if="hoveredPoint" class="tooltip" :class="`tooltip-${hoveredPoint.type}`">
@@ -657,6 +880,39 @@ onBeforeUnmount(() => {
               stroke-width="2"
             />
 
+            <!-- Y-axis labels (Noise - left side) -->
+            <g>
+              <text
+                v-for="(label, i) in noiseYLabels"
+                :key="`noise-y-${i}`"
+                :x="PADDING.left - 10"
+                :y="label.y"
+                text-anchor="end"
+                alignment-baseline="middle"
+                fill="#22c55e"
+                font-size="10"
+                font-weight="600"
+              >
+                {{ label.text }}
+              </text>
+            </g>
+
+            <!-- X-axis labels (Time) -->
+            <g>
+              <text
+                v-for="(label, i) in getTimeLabels"
+                :key="`noise-time-${i}`"
+                :x="label.x"
+                :y="PADDING.top + INNER_HEIGHT + 20"
+                text-anchor="middle"
+                fill="#94a3b8"
+                font-size="9"
+                font-weight="600"
+              >
+                {{ label.text }}
+              </text>
+            </g>
+
             <!-- Noise Bars -->
             <rect
               v-for="b in noiseBars"
@@ -673,6 +929,31 @@ onBeforeUnmount(() => {
             >
               <title>{{ b.v?.toFixed(1) }} dB</title>
             </rect>
+
+            <!-- Y-axis label text -->
+            <text
+              :x="PADDING.left - 45"
+              :y="PADDING.top + INNER_HEIGHT / 2"
+              text-anchor="middle"
+              fill="#22c55e"
+              font-size="11"
+              font-weight="700"
+              transform="rotate(-90, 15, 120)"
+            >
+              Sound Level (dB)
+            </text>
+
+            <!-- X-axis label -->
+            <text
+              :x="PADDING.left + INNER_WIDTH / 2"
+              :y="PADDING.top + INNER_HEIGHT + 40"
+              text-anchor="middle"
+              fill="#94a3b8"
+              font-size="11"
+              font-weight="700"
+            >
+              Time
+            </text>
           </svg>
 
           <div v-if="hoveredPoint?.type === 'noise'" class="tooltip tooltip-noise">
@@ -760,31 +1041,22 @@ onBeforeUnmount(() => {
             />
           </svg>
           <div class="gauge-value" style="font-size: 20px;">
-            {{ currentReadings.pressure.toFixed(0) }}
-            <span style="font-size: 12px; color: var(--muted);"> hPa</span>
+            {{ (currentReadings.pressure / 1000).toFixed(2) }}
+            <span style="font-size: 12px; color: var(--muted);"> kPa</span>
           </div>
         </div>
       </section>
 
-      <!-- GPS Map -->
+      <!-- GPS Map with Leaflet -->
       <section class="panel map-panel">
         <h3 class="chart-title">
           <i class="bi bi-geo-alt"></i> GPS Location
         </h3>
         <div class="map-container">
-          <div class="map-placeholder">
-            <div class="map-grid"></div>
-            <div 
-              class="map-marker" 
-              :style="{ 
-                left: `${markerPosition.x}px`, 
-                top: `${markerPosition.y}px` 
-              }"
-            ></div>
-            <div class="map-coords">
-              {{ currentReadings.gps.latitude.toFixed(4) }}°N, 
-              {{ currentReadings.gps.longitude.toFixed(4) }}°E
-            </div>
+          <div ref="mapContainer" class="leaflet-map"></div>
+          <div class="map-coords">
+            {{ currentReadings.gps.latitude.toFixed(6) }}°N, 
+            {{ currentReadings.gps.longitude.toFixed(6) }}°E
           </div>
         </div>
       </section>
@@ -816,7 +1088,7 @@ onBeforeUnmount(() => {
         <div class="stat-label">
           <i class="bi bi-speedometer2"></i> Pressure
         </div>
-        <div class="stat-value">{{ avgPressure.toFixed(1) }} hPa</div>
+        <div class="stat-value">{{ (avgPressure / 1000).toFixed(2) }} kPa</div>
         <div class="stat-sub">Average over {{ timeRange }}</div>
       </div>
 
@@ -1383,10 +1655,10 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 
-/* GPS Map */
+/* GPS Map with Leaflet */
 .map-container {
   width: 100%;
-  height: 300px;
+  height: 400px;
   background: var(--panel-2);
   border-radius: 6px;
   border: 1px solid var(--panel-border);
@@ -1394,52 +1666,10 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-.map-placeholder {
+.leaflet-map {
   width: 100%;
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: 
-    radial-gradient(circle at 20% 30%, rgba(61, 159, 255, 0.08) 0%, transparent 50%),
-    radial-gradient(circle at 80% 70%, rgba(34, 197, 94, 0.08) 0%, transparent 50%),
-    var(--panel-2);
-  position: relative;
-}
-
-.map-grid {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-image: 
-    linear-gradient(rgba(74, 85, 104, 0.2) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(74, 85, 104, 0.2) 1px, transparent 1px);
-  background-size: 40px 40px;
-  opacity: 0.5;
-}
-
-.map-marker {
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  background: var(--accent);
-  border-radius: 50%;
-  border: 3px solid rgba(61, 159, 255, 0.3);
-  animation: markerPulse 2s ease-in-out infinite;
-  transform: translate(-50%, -50%);
-}
-
-@keyframes markerPulse {
-  0%, 100% { 
-    transform: translate(-50%, -50%) scale(1);
-    box-shadow: 0 0 0 0 rgba(61, 159, 255, 0.7);
-  }
-  50% { 
-    transform: translate(-50%, -50%) scale(1.1);
-    box-shadow: 0 0 0 8px rgba(61, 159, 255, 0);
-  }
+  border-radius: 6px;
 }
 
 .map-coords {
@@ -1447,12 +1677,14 @@ onBeforeUnmount(() => {
   bottom: 12px;
   left: 12px;
   font-size: 11px;
-  color: var(--muted);
-  background: rgba(0, 0, 0, 0.6);
-  padding: 6px 10px;
+  color: var(--text);
+  background: rgba(17, 24, 39, 0.95);
+  padding: 8px 12px;
   border-radius: 4px;
   font-weight: 700;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--panel-border);
+  z-index: 1000;
 }
 
 /* Statistics Footer */
