@@ -559,6 +559,38 @@ onUnmounted(() => {
                   <small>Seeing different weather?</small>
                 </a>
               </div>
+        <!-- Layer Controls -->
+              <div class="card shadow-sm mb-3">
+                <div class="card-body p-2">
+                  <div class="btn-group w-100" role="group" aria-label="Map layer selection">
+                    <button 
+                      type="button" 
+                      :class="['btn', activeLayer === 'temp' ? 'btn-warning' : 'btn-outline-secondary']"
+                      @click="setActiveLayer('temp')"
+                      title="Temperature layer"
+                    >
+                      <i class="bi bi-thermometer-half"></i> Temp
+                    </button>
+                    <button 
+                      type="button" 
+                      :class="['btn', activeLayer === 'humid' ? 'btn-info' : 'btn-outline-secondary']"
+                      @click="setActiveLayer('humid')"
+                      title="Humidity layer"
+                    >
+                      <i class="bi bi-droplet-fill"></i> Humid
+                    </button>
+                    <button 
+                      type="button" 
+                      :class="['btn', activeLayer === 'noise' ? 'btn-danger' : 'btn-outline-secondary']"
+                      @click="setActiveLayer('noise')"
+                      title="Noise layer"
+                    >
+                      <i class="bi bi-soundwave"></i> Noise
+                    </button>
+                  </div>
+                </div>
+              </div>
+
 
               <!-- Main Temperature Display -->
               <div class="d-flex align-items-center mb-3 bg-secondary p-4 rounded">
@@ -700,42 +732,10 @@ onUnmounted(() => {
 
         <!-- Right Column - Controls & Devices -->
         <div class="col-lg-3">
-          <!-- Layer Controls -->
-          <div class="card shadow-sm mb-3">
-            <div class="card-body p-2">
-              <div class="btn-group w-100" role="group" aria-label="Map layer selection">
-                <button 
-                  type="button" 
-                  :class="['btn', activeLayer === 'temp' ? 'btn-warning' : 'btn-outline-secondary']"
-                  @click="setActiveLayer('temp')"
-                  title="Temperature layer"
-                >
-                  <i class="bi bi-thermometer-half"></i> Temp
-                </button>
-                <button 
-                  type="button" 
-                  :class="['btn', activeLayer === 'humid' ? 'btn-info' : 'btn-outline-secondary']"
-                  @click="setActiveLayer('humid')"
-                  title="Humidity layer"
-                >
-                  <i class="bi bi-droplet-fill"></i> Humid
-                </button>
-                <button 
-                  type="button" 
-                  :class="['btn', activeLayer === 'noise' ? 'btn-danger' : 'btn-outline-secondary']"
-                  @click="setActiveLayer('noise')"
-                  title="Noise layer"
-                >
-                  <i class="bi bi-soundwave"></i> Noise
-                </button>
-              </div>
-            </div>
-          </div>
-
           <!-- Device List Card -->
           <div class="card shadow-sm mb-3">
             <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-              <span><strong>Active Devices</strong></span>
+              <span><strong>List of Robustel EG 5120 (Edge Gateways)</strong></span>
               <button 
                 @click="resetView" 
                 class="btn btn-sm btn-light"
