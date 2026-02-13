@@ -38,9 +38,8 @@ const nearbyLocations = ref([])
 
 // Configuration
 const availableMeasurements = [
-  { measurement: 'Sensor_S6000U_data1', device_id: 101 },
-  { measurement: 'Sensor_S6000U_data2', device_id: 102 },
-  { measurement: 'Sensor_S6000U_data3', device_id: 103 },
+  { measurement: 'Sensor_S6000U_data2', device_id: '' },
+
 ]
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
@@ -725,7 +724,7 @@ onUnmounted(() => {
                       <small class="text-muted mb-1">
                         Device <i class="bi bi-info-circle" title="Active sensor device"></i>
                       </small>
-                      <strong>{{ selectedDevice?.device_id || '102' }}</strong>
+                      <strong>{{ selectedDevice?.device_id || ' ' }}</strong>
                     </div>
                   </div>
                   
