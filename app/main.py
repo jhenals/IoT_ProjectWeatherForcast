@@ -27,7 +27,7 @@ app = FastAPI(docs_url="/", redoc_url=None,
 # 3. Secure CORS: Dynamic origins from environment variables
 # Avoid "*" in production; explicitly list trusted domains
 ALLOWED_ORIGINS = os.getenv(
-    "ALLOWED_ORIGINS", "http://localhost:5174,http://127.0.0.1:5174, http://192.168.0.1:8086").split(",")
+    "ALLOWED_ORIGINS", "http://localhost:5174,http://127.0.0.1:5174,http://localhost:5173,http://127.0.0.1:5173,http://192.168.0.1:8086,http://127.0.0.1:5500").split(",")
 
 app.add_middleware(
     CORSMiddleware,

@@ -6,11 +6,12 @@ from config import INFLUXDB_BUCKET, INFLUXDB_Measurement as meas
 
 router = APIRouter(prefix="/api/weather", tags=["weather"])
 
+
 @router.get("/forecast/", response_model=List[WeatherPoint])
 def get_weather_forecast(
-    #device_id: str,
+    # device_id: str,
     minutes: int = Query(60, ge=1, le=7*24*60),
-    measurement: str = Query(meas),):
+        measurement: str = Query(meas),):
     # Flux query: filter by time range, measurement, and device_id tag
     flux = f'''
 from(bucket: "{INFLUXDB_BUCKET}")
@@ -39,4 +40,3 @@ from(bucket: "{INFLUXDB_BUCKET}")
     result = list(by_time.values())
     result.sort(key=lambda x: x["time"])
     return result
- 
