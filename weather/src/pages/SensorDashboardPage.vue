@@ -40,31 +40,41 @@ async function loadLatest() {
       const deviceId = reading.device_id || 'unknown'
       const existingReading = deviceMap.get(deviceId)
       
+      // Skip readings without a timestamp
+      if (!reading.time) return
+      
+      const currentTime = new Date(reading.time).getTime()
+      
       // Keep the reading with the most recent timestamp
-      if (!existingReading || new Date(reading.time) > new Date(existingReading.time)) {
-        deviceMap.set(deviceId, {
-          deviceId: deviceId,
-          temperature: reading.temperature ?? '—',
-          humidity: reading.humidity ?? '—',
-          pressure: reading.pressure ? (reading.pressure / 1000).toFixed(2) : '—',
-          light: reading.light ?? '—',
-          noise: reading.noise ?? '—',
-          tof: reading.tof ?? '—',
-          angle: reading.angle ?? '—',
-          accX: reading.accX ?? '—',
-          accY: reading.accY ?? '—',
-          accZ: reading.accZ ?? '—',
-          vibrAccX: reading.vibrAccX ?? '—',
-          vibrAccY: reading.vibrAccY ?? '—',
-          vibrAccZ: reading.vibrAccZ ?? '—',
-          observedAt: reading.time ? new Date(reading.time).toLocaleString() : '—',
-          timestamp: reading.time
-        })
+      if (!existingReading) {
+        deviceMap.set(deviceId, reading)
+      } else {
+        const existingTime = new Date(existingReading.time).getTime()
+        if (currentTime > existingTime) {
+          deviceMap.set(deviceId, reading)
+        }
       }
     })
 
-    // Convert map to array and sort by device_id
-    devices.value = Array.from(deviceMap.values()).sort((a, b) => {
+    // Convert map to array, transform data, and sort by device_id
+    devices.value = Array.from(deviceMap.values()).map(reading => ({
+      deviceId: reading.device_id || 'unknown',
+      temperature: reading.temperature ?? '—',
+      humidity: reading.humidity ?? '—',
+      pressure: reading.pressure ? (reading.pressure / 1000).toFixed(2) : '—',
+      light: reading.light ?? '—',
+      noise: reading.noise ?? '—',
+      tof: reading.tof ?? '—',
+      angle: reading.angle ?? '—',
+      accX: reading.accX ?? '—',
+      accY: reading.accY ?? '—',
+      accZ: reading.accZ ?? '—',
+      vibrAccX: reading.vibrAccX ?? '—',
+      vibrAccY: reading.vibrAccY ?? '—',
+      vibrAccZ: reading.vibrAccZ ?? '—',
+      observedAt: reading.time ? new Date(reading.time).toLocaleString() : '—',
+      timestamp: reading.time
+    })).sort((a, b) => {
       const idA = String(a.deviceId || '')
       const idB = String(b.deviceId || '')
       return idA.localeCompare(idB)
@@ -181,7 +191,7 @@ function formatValue(v, unit) {
 
 onMounted(() => {
   loadLatest()
-  timer = setInterval(loadLatest, 15_000)
+  timer = setInterval(loadLatest, 15_000) // Refresh every 30 seconds
 })
 
 onUnmounted(() => {

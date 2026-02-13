@@ -25,7 +25,7 @@ const TIME_RANGES = {
 /* -----------------------
  * State
  * --------------------- */
-const selectedDevice = ref('S6000U')
+const selectedDevice = ref('101')
 const timeRange = ref('3h')
 const refreshSeconds = ref(30)
 
