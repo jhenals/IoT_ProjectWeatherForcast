@@ -669,7 +669,7 @@ onBeforeUnmount(() => {
               <rect v-for="b in presBars" :key="`p-bar-${b.i}`" :x="b.x" :y="b.y" :width="b.w" :height="b.h" rx="3" :fill="isPointSelected('pres', b.i) ? '#fbbf24' : '#10b981'" style="cursor: pointer; transition: all 0.2s ease" @click.ctrl="togglePointSelection('pres', b.i, null, null, b.v, b.t)" @mouseover="hoveredPoint = { type: 'pres', v: b.v, t: b.t }" @mouseout="hoveredPoint = null" />
             </template>
           </svg>
-          <div v-if="hoveredPoint?.type === 'pres'" class="tooltip tooltip-pres">{{ hoveredPoint.v?.toFixed(2) }} hPa<div class="tooltip-sub">{{ formatTs(hoveredPoint.t) }}</div></div>
+          <div v-if="hoveredPoint?.type === 'pres'" class="tooltip tooltip-pres">{{ hoveredPoint.v?.toFixed(2) }} kPa<div class="tooltip-sub">{{ formatTs(hoveredPoint.t) }}</div></div>
         </div>
         <div class="zoom-row">
           <button class="btn btn-primary btn-sm" @click="zoomIn"><i class="bi bi-zoom-in"></i></button>
