@@ -5,10 +5,10 @@ import { defineEmits } from 'vue'
 const emit = defineEmits(['navigate'])
 
 const items = [
-  { key: 'upload', title: 'Load' },
-  { key: 'chart', title: 'Charts' },
-  { key: 'grid', title: 'Apps' },
-  { key: 'gear', title: 'Settings' },
+  { key: 'upload', title: 'Weather' },
+  { key: 'chart', title: 'Sensor Analytics' },
+  { key: 'grid', title: 'Grafana_Like' },
+  { key: 'gear', title: 'Help' },
 ]
 </script>
 
