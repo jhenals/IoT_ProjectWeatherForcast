@@ -1,4 +1,4 @@
-# routes/rag.py - Groq version with multi-language support and full sensor data
+# routes/rag.py - Groq version with multi-language support, full sensor data, and weather prediction
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from groq import Groq
 import os
@@ -31,12 +31,15 @@ You help visitors with questions about park conditions, environmental data, and 
 
 {context}
 
+{weather_context}
+
 INSTRUCTIONS:
 - Answer questions about temperature, humidity, pressure, light levels, noise levels, air quality, and other environmental conditions using the sensor data above.
 - Each device/sensor monitors a specific area of the park.
 - If asked about a specific device ID, use that device's data.
 - If sensor data is unavailable for a device, acknowledge it politely.
 - For general park questions, provide helpful summaries of the available data.
+- When discussing weather predictions, use the confidence level naturally (e.g., "it will likely rain" instead of "85% chance of rain").
 - If visitor asks about park facilities you don't have data for, politely say you don't have that information.
 - If no sensor data exists, inform the user the sensors are temporarily offline.
 - For general questions not about park conditions, answer helpfully and naturally.
@@ -52,12 +55,15 @@ AVAILABLE SENSOR METRICS:
 - Noise (dB): Ambient noise level
 - TOF: Time of Flight distance measurement (cm)
 - Acceleration: Movement/vibration data (X, Y, Z axes)
-- Location: GPS coordinates (latitude, longitude)""",
+- Location: GPS coordinates (latitude, longitude)
+- Weather Prediction: Predicted weather conditions from sensor analysis
+- Prediction Confidence: Confidence level (%) for the weather prediction""",
         "no_data": "PARK SENSOR DATA:\n(No sensor data available at the moment)",
         "invalid_format": "PARK SENSOR DATA:\n(Invalid sensor data format)",
         "parse_error": "PARK SENSOR DATA:\n(Sensor data parsing error)",
         "no_readings": "PARK SENSOR DATA:\n(No sensor readings available)",
         "data_header": "PARK SENSOR DATA:",
+        "weather_header": "WEATHER PREDICTION:",
     },
     "it": {
         "system_template": """Sei un utile Assistente AI per un sistema di Parco Intelligente.
@@ -65,12 +71,15 @@ Aiuti i visitatori con domande sulle condizioni del parco, dati ambientali e dom
 
 {context}
 
+{weather_context}
+
 ISTRUZIONI:
 - Rispondi alle domande su temperatura, umidità, pressione, livelli di luce, livelli di rumore, qualità dell'aria e altre condizioni ambientali usando i dati dei sensori sopra.
 - Ogni dispositivo/sensore monitora un'area specifica del parco.
 - Se viene chiesto di un ID dispositivo specifico, usa i dati di quel dispositivo.
 - Se i dati del sensore non sono disponibili per un dispositivo, riconoscilo gentilmente.
 - Per domande generali sul parco, fornisci riepiloghi utili dei dati disponibili.
+- Quando discuti delle previsioni meteo, usa il livello di confidenza in modo naturale (es. "probabilmente pioverà" invece di "85% di possibilità di pioggia").
 - Se il visitatore chiede delle strutture del parco per cui non hai dati, rispondi gentilmente che non hai queste informazioni.
 - Se non esistono dati dei sensori, informa l'utente che i sensori sono temporaneamente offline.
 - Per domande generali non relative alle condizioni del parco, rispondi in modo utile e naturale.
@@ -86,12 +95,15 @@ METRICHE SENSORI DISPONIBILI:
 - Rumore (dB): Livello di rumore ambientale
 - TOF: Misurazione della distanza Time of Flight (cm)
 - Accelerazione: Dati di movimento/vibrazione (assi X, Y, Z)
-- Posizione: Coordinate GPS (latitudine, longitudine)""",
+- Posizione: Coordinate GPS (latitudine, longitudine)
+- Previsione Meteo: Condizioni meteorologiche previste dall'analisi dei sensori
+- Confidenza Previsione: Livello di confidenza (%) per la previsione meteo""",
         "no_data": "DATI SENSORI PARCO:\n(Nessun dato sensore disponibile al momento)",
         "invalid_format": "DATI SENSORI PARCO:\n(Formato dati sensore non valido)",
         "parse_error": "DATI SENSORI PARCO:\n(Errore nell'analisi dei dati del sensore)",
         "no_readings": "DATI SENSORI PARCO:\n(Nessuna lettura sensore disponibile)",
         "data_header": "DATI SENSORI PARCO:",
+        "weather_header": "PREVISIONE METEO:",
     }
 }
 
@@ -101,6 +113,66 @@ def _normalize_audio_mime(mime: str | None) -> str:
         return "wav"
     mime = mime.strip().lower()
     return SUPPORTED_AUDIO_MIMES.get(mime, "wav")
+
+def _get_weather_from_data(device_data: str | None) -> tuple[str, float]:
+    """
+    Extract weather prediction from database sensor data
+    Returns: (weather_prediction, confidence_percentage)
+    """
+    if not device_data:
+        return "Unknown", 0.0
+    
+    try:
+        data_list = json.loads(device_data)
+        if not isinstance(data_list, list) or not data_list:
+            return "Unknown", 0.0
+        
+        # Get weather prediction from first device that has it
+        # (assuming all devices have the same weather prediction for the park)
+        for device in data_list:
+            if isinstance(device, dict):
+                if 'weather_prediction' in device and 'prediction_confidence' in device:
+                    prediction = device['weather_prediction']
+                    confidence = float(device['prediction_confidence'])
+                    return prediction, confidence
+        
+        # If no weather data found in any device
+        return "Unknown", 0.0
+        
+    except Exception as e:
+        print(f"Error extracting weather data: {e}")
+        return "Unknown", 0.0
+
+def _confidence_to_verbal(confidence: float, language: str = "en") -> str:
+    """
+    Convert confidence percentage to verbal expression
+    """
+    if language == "it":
+        if confidence >= 90:
+            return "quasi certamente"
+        elif confidence >= 80:
+            return "molto probabilmente"
+        elif confidence >= 70:
+            return "probabilmente"
+        elif confidence >= 60:
+            return "abbastanza probabilmente"
+        elif confidence >= 50:
+            return "forse"
+        else:
+            return "potrebbe essere"
+    else:  # English
+        if confidence >= 90:
+            return "almost certainly"
+        elif confidence >= 80:
+            return "very likely"
+        elif confidence >= 70:
+            return "likely"
+        elif confidence >= 60:
+            return "probably"
+        elif confidence >= 50:
+            return "possibly"
+        else:
+            return "might be"
 
 def _format_sensor_reading(device: Dict[str, Any], language: str = "en") -> str:
     """Format a single sensor device reading into a readable string"""
@@ -116,7 +188,9 @@ def _format_sensor_reading(device: Dict[str, Any], language: str = "en") -> str:
             "noise": "Rumore",
             "tof": "Distanza TOF",
             "location": "Posizione",
-            "time": "Ora"
+            "time": "Ora",
+            "weather": "Previsione Meteo",
+            "confidence": "Confidenza"
         }
     else:
         labels = {
@@ -128,7 +202,9 @@ def _format_sensor_reading(device: Dict[str, Any], language: str = "en") -> str:
             "noise": "Noise",
             "tof": "TOF Distance",
             "location": "Location",
-            "time": "Time"
+            "time": "Time",
+            "weather": "Weather Prediction",
+            "confidence": "Confidence"
         }
     
     parts = [f"{labels['device']} {device.get('device_id', 'Unknown')}:"]
@@ -146,6 +222,12 @@ def _format_sensor_reading(device: Dict[str, Any], language: str = "en") -> str:
         parts.append(f"  {labels['noise']}: {device['noise']} dB")
     if 'tof' in device:
         parts.append(f"  {labels['tof']}: {device['tof']} cm")
+    
+    # Weather prediction (if available)
+    if 'weather_prediction' in device:
+        parts.append(f"  {labels['weather']}: {device['weather_prediction']}")
+    if 'prediction_confidence' in device:
+        parts.append(f"  {labels['confidence']}: {device['prediction_confidence']}%")
     
     # Location data
     if 'latitude' in device and 'longitude' in device:
@@ -183,6 +265,22 @@ def _build_sensor_context(device_data: str | None, language: str = "en") -> str:
     
     return lang_strings["data_header"] + "\n\n" + "\n\n".join(readings)
 
+def _build_weather_context(weather_prediction: str, prediction_confidence: float, language: str = "en") -> str:
+    """Build weather prediction context with verbal confidence"""
+    lang_strings = SYSTEM_PROMPTS.get(language, SYSTEM_PROMPTS["en"])
+    
+    if weather_prediction == "Unknown" or prediction_confidence == 0.0:
+        return ""
+    
+    verbal_confidence = _confidence_to_verbal(prediction_confidence, language)
+    
+    if language == "it":
+        weather_text = f"{lang_strings['weather_header']}\nLe condizioni {verbal_confidence} saranno: {weather_prediction}"
+    else:
+        weather_text = f"{lang_strings['weather_header']}\nConditions will {verbal_confidence} be: {weather_prediction}"
+    
+    return weather_text
+
 @router.post("/chat")
 async def process_rag_request(
     user_query: str = Form(None),
@@ -203,8 +301,13 @@ async def process_rag_request(
         print(f"audio_file: {audio_file.filename if audio_file else 'None'}")
         print(f"audio_type: {audio_file.content_type if audio_file else 'None'}")
         
+        # Extract weather prediction from database sensor data
+        weather_prediction, prediction_confidence = _get_weather_from_data(device_data)
+        print(f"Weather prediction: {weather_prediction} (confidence: {prediction_confidence:.1f}%)")
+        
         # Build context with full sensor data
         context_str = _build_sensor_context(device_data, language)
+        weather_context_str = _build_weather_context(weather_prediction, prediction_confidence, language)
 
         # Validate: need at least audio OR text query
         if not user_query and not audio_file:
@@ -301,12 +404,17 @@ async def process_rag_request(
             )
             return {
                 "transcript": transcript,
-                "answer": error_response
+                "answer": error_response,
+                "weather_prediction": weather_prediction,
+                "prediction_confidence": prediction_confidence
             }
 
         # Get language-specific system prompt
         lang_prompts = SYSTEM_PROMPTS.get(language, SYSTEM_PROMPTS["en"])
-        system_message = lang_prompts["system_template"].format(context=context_str)
+        system_message = lang_prompts["system_template"].format(
+            context=context_str,
+            weather_context=weather_context_str
+        )
 
         # Call Groq Chat Completion
         print(f"Calling Groq chat completion with query: {query_text[:100]}...")
@@ -330,10 +438,12 @@ async def process_rag_request(
         answer = chat_completion.choices[0].message.content.strip()
         print(f"Groq response received: {answer[:200]}...")
 
-        # Return structured response
+        # Return structured response with weather prediction
         return {
             "transcript": transcript,
-            "answer": answer
+            "answer": answer,
+            "weather_prediction": weather_prediction,
+            "prediction_confidence": prediction_confidence
         }
 
     except HTTPException:

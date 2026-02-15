@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import os
 
 SEED = 42
-FEATURES = ["temperature", "humidity", "pressure", "tof"]
+FEATURES = ["temperature", "humidity", "pressure"]
 LABEL_COL = "Weather"
 MIN_SAMPLES = 10
 dropout = 0.3
@@ -119,7 +119,6 @@ def main():
             "pressure": "kPa",
             "temperature": "C",
             "humidity": "%",
-            "tof": "unknown"
         },
         "scaler": {
             "mean": scaler.mean_.tolist(),

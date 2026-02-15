@@ -20,7 +20,7 @@ def load_preprocess(path: str):
     with open(path, "r", encoding="utf-8") as f:
         pp = json.load(f)
 
-    features = pp.get("features", ["temperature", "humidity", "pressure", "tof"])
+    features = pp.get("features", ["temperature", "humidity", "pressure"])
     scaler = pp["scaler"]
     mean = np.array(scaler["mean"], dtype=np.float32)
     std = np.array(scaler["std"], dtype=np.float32)

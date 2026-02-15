@@ -1,4 +1,4 @@
-// SensorDashboardPage.vue - Updated with Detail Modal
+// SensorDashboardPage.vue - Updated with Detail Modal and Weather Prediction
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import AppShell from '../components/layout/AppShell.vue'
@@ -66,6 +66,7 @@ async function loadLatest() {
       noise: reading.noise ?? '—',
       tof: reading.tof ?? '—',
       angle: reading.angle ?? '—',
+      weather_prediction: reading.weather_prediction ?? '—',
       accX: reading.accX ?? '—',
       accY: reading.accY ?? '—',
       accZ: reading.accZ ?? '—',
@@ -110,6 +111,7 @@ async function loadDeviceDetails(deviceId) {
       noise: reading.noise ?? '—',
       tof: reading.tof ?? '—',
       angle: reading.angle ?? '—',
+      weather_prediction: reading.weather_prediction ?? '—',
       accX: reading.accX ?? '—',
       accY: reading.accY ?? '—',
       accZ: reading.accZ ?? '—',
@@ -191,7 +193,7 @@ function formatValue(v, unit) {
 
 onMounted(() => {
   loadLatest()
-  timer = setInterval(loadLatest, 15_000) // Refresh every 30 seconds
+  timer = setInterval(loadLatest, 15_000) // Refresh every 15 seconds
 })
 
 onUnmounted(() => {
@@ -426,6 +428,14 @@ onUnmounted(() => {
                       </strong>
                     </div>
                   </div>
+                  <div class="col-md-12">
+                    <div class="d-flex flex-column">
+                      <small class="text-secondary mb-1">Weather Prediction</small>
+                      <strong class="fs-5 text-light">
+                        {{ selectedDevice?.weather_prediction || '—' }}
+                      </strong>
+                    </div>
+                  </div>
                 </div>
                 <div class="mt-3 pt-3 border-top border-secondary">
                   <small class="text-secondary">Last Updated:</small>
@@ -472,6 +482,7 @@ onUnmounted(() => {
                         <th>Noise</th>
                         <th>ToF</th>
                         <th>Angle</th>
+                        <th>Weather</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -484,6 +495,7 @@ onUnmounted(() => {
                         <td class="text-info">{{ formatValue(reading.noise, 'dB') }}</td>
                         <td class="text-success">{{ formatValue(reading.tof, 'cm') }}</td>
                         <td class="text-primary">{{ formatValue(reading.angle, 'deg') }}</td>
+                        <td class="text-light">{{ reading.weather_prediction || '—' }}</td>
                       </tr>
                     </tbody>
                   </table>
