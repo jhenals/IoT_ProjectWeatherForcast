@@ -340,10 +340,13 @@ async function fetchDevices() {
   try {
     const devicePromises = availableMeasurements.map(async (device) => {
       try {
-        const res = await fetch(
-          `${API_BASE}/api/weather/forecast/?minutes=60&measurement=${device.measurement}`
-        )
-        
+        //const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=60&measurement=${device.measurement}`)
+        const token = localStorage.getItem('access_token')
+        const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=60&measurement=${device.measurement}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
         if (!res.ok) return null
         
         const data = await res.json()
@@ -397,9 +400,12 @@ async function fetchWeatherData(measurement = 'Sensor_S6000U_data2') {
     loading.value = true
     error.value = ''
     
-    const res = await fetch(
-      `${API_BASE}/api/weather/forecast/?minutes=60&measurement=${measurement}`
-    )
+    const token = localStorage.getItem('access_token')
+    const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=60&measurement=${measurement}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
     
     if (!res.ok) throw new Error(`API Error: ${res.status} ${res.statusText}`)
     

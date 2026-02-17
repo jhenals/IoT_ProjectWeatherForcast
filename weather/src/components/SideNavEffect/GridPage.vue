@@ -227,10 +227,15 @@ const fetchSensorData = async () => {
   try {
     const minutes = minutesForRange(timeRange.value)
     // Fetch all data without device_id filter to get all available devices
-    const url = `${API_BASE}/api/weather/forecast/?minutes=${minutes}`
+   // const url = `${API_BASE}/api/weather/forecast/?minutes=${minutes}`
     console.log('Fetching data for all devices')
     
-    const res = await fetch(url)
+    const token = localStorage.getItem('access_token')
+    const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=${minutes}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`
+  }
+})
     
     console.log('Response status:', res.status)
     

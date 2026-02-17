@@ -1,4 +1,4 @@
-<!-- ChartPage.vue - Enhanced Interactive Grafana-like Dashboard -->
+<!-- ChartPage.vue - Enhanced Interactive Grafana-like Dashboard with Axes -->
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 
@@ -23,6 +23,7 @@ const hoveredPoint = ref(null)
 const selectedPoints = ref([])
 const showStats = ref(true)
 const showGrid = ref(true)
+const fullscreenChart = ref(null) // null, 'temp', 'hum', 'pres'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
@@ -32,7 +33,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 const svgWidth = 800
 const svgHeight = 350
 
-const PADDING = { left: 50, right: 30, top: 20, bottom: 30 }
+const PADDING = { left: 70, right: 30, top: 20, bottom: 50 } // Increased for axes
 const innerWidth = svgWidth - PADDING.left - PADDING.right
 const innerHeight = svgHeight - PADDING.top - PADDING.bottom
 
@@ -59,9 +60,13 @@ function minutesForRange(range) {
   return ranges[range] || 360
 }
 
-function formatTs(ts) {
+function formatTs(ts, short = false) {
   try {
-    return new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const d = new Date(ts)
+    if (short) {
+      return d.toLocaleString('en-US', { hour: '2-digit', minute: '2-digit' })
+    }
+    return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   } catch {
     return ''
   }
@@ -105,7 +110,7 @@ function bucketize(rows) {
 }
 
 /* -----------------------
- * Fetch data
+ * Fetch data with Auth
  * --------------------- */
 async function loadChartData() {
   loading.value = true
@@ -119,8 +124,26 @@ async function loadChartData() {
     const url = new URL(`${API_BASE}/api/weather/forecast/`)
     url.searchParams.set('minutes', String(minutes))
 
-    const res = await fetch(url.toString())
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+    // Get JWT token from localStorage
+    const token = localStorage.getItem('access_token')
+    
+    const res = await fetch(url.toString(), {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    
+    if (!res.ok) {
+      // If unauthorized, clear token and reload (will show login page)
+      if (res.status === 401) {
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('username')
+        window.location.reload()
+        return
+      }
+      throw new Error(`${res.status} ${res.statusText}`)
+    }
+
     const data = await res.json()
 
     if (!Array.isArray(data)) throw new Error('Unexpected API response')
@@ -142,6 +165,7 @@ async function loadChartData() {
 
     chartData.value = bucketize(normalized)
   } catch (e) {
+    console.error('Chart data error:', e)
     error.value = String(e?.message || e)
     chartData.value = []
     availableDevices.value = []
@@ -149,6 +173,60 @@ async function loadChartData() {
     loading.value = false
   }
 }
+
+/* -----------------------
+ * Axis helpers
+ * --------------------- */
+function generateYAxisLabels(min, max, count = 5) {
+  const range = max - min || 1
+  const step = range / (count - 1)
+  const labels = []
+  for (let i = 0; i < count; i++) {
+    const value = min + step * i
+    const y = yForValue(value, min, max)
+    labels.push({ value, y })
+  }
+  return labels.reverse()
+}
+
+function generateXAxisLabels(count = 6) {
+  const len = chartData.value.length
+  if (len === 0) return []
+  
+  const labels = []
+  const step = Math.max(1, Math.floor(len / (count - 1)))
+  
+  for (let i = 0; i < len; i += step) {
+    const row = chartData.value[i]
+    const x = xForIndex(i, len)
+    labels.push({ time: row.t, x })
+  }
+  
+  // Always include last point
+  if (labels[labels.length - 1]?.time !== chartData.value[len - 1]?.t) {
+    const last = chartData.value[len - 1]
+    labels.push({ time: last.t, x: xForIndex(len - 1, len) })
+  }
+  
+  return labels
+}
+
+const tempYLabels = computed(() => {
+  if (chartData.value.length === 0) return []
+  return generateYAxisLabels(minTemperature.value, maxTemperature.value)
+})
+const humYLabels = computed(() => {
+  if (chartData.value.length === 0) return []
+  return generateYAxisLabels(minHumidity.value, maxHumidity.value)
+})
+const presYLabels = computed(() => {
+  if (chartData.value.length === 0) return []
+  return generateYAxisLabels(minPressure.value, maxPressure.value)
+})
+const xLabels = computed(() => {
+  if (chartData.value.length === 0) return []
+  return generateXAxisLabels()
+})
 
 /* -----------------------
  * Stats
@@ -333,6 +411,17 @@ function clearSelection() {
 }
 
 /* -----------------------
+ * Fullscreen toggle
+ * --------------------- */
+function toggleFullscreen(chartType) {
+  if (fullscreenChart.value === chartType) {
+    fullscreenChart.value = null
+  } else {
+    fullscreenChart.value = chartType
+  }
+}
+
+/* -----------------------
  * Zoom & Pan
  * --------------------- */
 const isPanning = ref(false)
@@ -422,6 +511,105 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="dashboard">
+    <!-- Fullscreen overlay -->
+    <div v-if="fullscreenChart" class="fullscreen-overlay" @click.self="fullscreenChart = null">
+      <div class="fullscreen-chart-wrapper">
+        <button class="close-fullscreen" @click="fullscreenChart = null">
+          <i class="bi bi-x-lg"></i>
+        </button>
+        
+        <!-- Temperature Fullscreen -->
+        <div v-if="fullscreenChart === 'temp'" class="fullscreen-chart">
+          <h2 class="fs-chart-title"><i class="bi bi-thermometer-half"></i> Temperature Over Time</h2>
+          <div class="fs-chart-wrap">
+            <svg viewBox="0 0 1400 700">
+              <!-- Y-axis labels -->
+              <g v-for="label in tempYLabels" :key="`fs-ty-${label.y}`">
+                <text :x="55" :y="(label.y / svgHeight) * 700" text-anchor="end" fill="#a0aec0" font-size="16">{{ label.value.toFixed(1) }}°C</text>
+                <line :x1="70" :y1="(label.y / svgHeight) * 700" :x2="1370" :y2="(label.y / svgHeight) * 700" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+              </g>
+              
+              <!-- X-axis labels -->
+              <g v-for="(label, idx) in xLabels" :key="`fs-tx-${idx}`">
+                <text :x="(label.x / svgWidth) * 1400" y="680" text-anchor="middle" fill="#a0aec0" font-size="14">{{ formatTs(label.time, true) }}</text>
+                <line :x1="(label.x / svgWidth) * 1400" y1="30" :x2="(label.x / svgWidth) * 1400" y2="650" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+              </g>
+              
+              <line x1="70" y1="30" x2="70" y2="650" stroke="#4a5568" stroke-width="3"/>
+              <line x1="70" y1="650" x2="1370" y2="650" stroke="#4a5568" stroke-width="3"/>
+              
+              <polyline :points="temperatureSeries.map(p => `${(p.x / svgWidth) * 1400},${(p.y / svgHeight) * 700}`).join(' ')" fill="none" stroke="#ef4444" stroke-width="4"/>
+              <circle v-for="p in temperatureSeries" :key="`fs-t-${p.i}`" :cx="(p.x / svgWidth) * 1400" :cy="(p.y / svgHeight) * 700" r="6" fill="#ef4444" style="cursor: pointer" @mouseover="hoveredPoint = { type: 'temp', v: p.v, t: p.t }" @mouseout="hoveredPoint = null"/>
+            </svg>
+            <div v-if="hoveredPoint?.type === 'temp'" class="fs-tooltip fs-tooltip-temp">
+              <div class="fs-tooltip-value">{{ hoveredPoint.v?.toFixed(2) }}°C</div>
+              <div class="fs-tooltip-time">{{ formatTs(hoveredPoint.t) }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Humidity Fullscreen -->
+        <div v-if="fullscreenChart === 'hum'" class="fullscreen-chart">
+          <h2 class="fs-chart-title"><i class="bi bi-droplet-half"></i> Humidity Over Time</h2>
+          <div class="fs-chart-wrap">
+            <svg viewBox="0 0 1400 700">
+              <!-- Y-axis labels -->
+              <g v-for="label in humYLabels" :key="`fs-hy-${label.y}`">
+                <text :x="55" :y="(label.y / svgHeight) * 700" text-anchor="end" fill="#a0aec0" font-size="16">{{ label.value.toFixed(1) }}%</text>
+                <line :x1="70" :y1="(label.y / svgHeight) * 700" :x2="1370" :y2="(label.y / svgHeight) * 700" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+              </g>
+              
+              <!-- X-axis labels -->
+              <g v-for="(label, idx) in xLabels" :key="`fs-hx-${idx}`">
+                <text :x="(label.x / svgWidth) * 1400" y="680" text-anchor="middle" fill="#a0aec0" font-size="14">{{ formatTs(label.time, true) }}</text>
+                <line :x1="(label.x / svgWidth) * 1400" y1="30" :x2="(label.x / svgWidth) * 1400" y2="650" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+              </g>
+              
+              <line x1="70" y1="30" x2="70" y2="650" stroke="#4a5568" stroke-width="3"/>
+              <line x1="70" y1="650" x2="1370" y2="650" stroke="#4a5568" stroke-width="3"/>
+              
+              <polyline :points="humiditySeries.map(p => `${(p.x / svgWidth) * 1400},${(p.y / svgHeight) * 700}`).join(' ')" fill="none" stroke="#3b82f6" stroke-width="4"/>
+              <circle v-for="p in humiditySeries" :key="`fs-h-${p.i}`" :cx="(p.x / svgWidth) * 1400" :cy="(p.y / svgHeight) * 700" r="6" fill="#3b82f6" style="cursor: pointer" @mouseover="hoveredPoint = { type: 'hum', v: p.v, t: p.t }" @mouseout="hoveredPoint = null"/>
+            </svg>
+            <div v-if="hoveredPoint?.type === 'hum'" class="fs-tooltip fs-tooltip-hum">
+              <div class="fs-tooltip-value">{{ hoveredPoint.v?.toFixed(2) }}%</div>
+              <div class="fs-tooltip-time">{{ formatTs(hoveredPoint.t) }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pressure Fullscreen -->
+        <div v-if="fullscreenChart === 'pres'" class="fullscreen-chart">
+          <h2 class="fs-chart-title"><i class="bi bi-speedometer2"></i> Pressure Over Time</h2>
+          <div class="fs-chart-wrap">
+            <svg viewBox="0 0 1400 700">
+              <!-- Y-axis labels -->
+              <g v-for="label in presYLabels" :key="`fs-py-${label.y}`">
+                <text :x="55" :y="(label.y / svgHeight) * 700" text-anchor="end" fill="#a0aec0" font-size="16">{{ (label.value / 1000).toFixed(2) }} kPa</text>
+                <line :x1="70" :y1="(label.y / svgHeight) * 700" :x2="1370" :y2="(label.y / svgHeight) * 700" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+              </g>
+              
+              <!-- X-axis labels -->
+              <g v-for="(label, idx) in xLabels" :key="`fs-px-${idx}`">
+                <text :x="(label.x / svgWidth) * 1400" y="680" text-anchor="middle" fill="#a0aec0" font-size="14">{{ formatTs(label.time, true) }}</text>
+                <line :x1="(label.x / svgWidth) * 1400" y1="30" :x2="(label.x / svgWidth) * 1400" y2="650" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+              </g>
+              
+              <line x1="70" y1="30" x2="70" y2="650" stroke="#4a5568" stroke-width="3"/>
+              <line x1="70" y1="650" x2="1370" y2="650" stroke="#4a5568" stroke-width="3"/>
+              
+              <polyline :points="pressureSeries.map(p => `${(p.x / svgWidth) * 1400},${(p.y / svgHeight) * 700}`).join(' ')" fill="none" stroke="#10b981" stroke-width="4"/>
+              <circle v-for="p in pressureSeries" :key="`fs-p-${p.i}`" :cx="(p.x / svgWidth) * 1400" :cy="(p.y / svgHeight) * 700" r="6" fill="#10b981" style="cursor: pointer" @mouseover="hoveredPoint = { type: 'pres', v: p.v, t: p.t }" @mouseout="hoveredPoint = null"/>
+            </svg>
+            <div v-if="hoveredPoint?.type === 'pres'" class="fs-tooltip fs-tooltip-pres">
+              <div class="fs-tooltip-value">{{ (hoveredPoint.v / 1000)?.toFixed(2) }} kPa</div>
+              <div class="fs-tooltip-time">{{ formatTs(hoveredPoint.t) }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Header -->
     <div class="header">
       <div class="header-top">
@@ -495,19 +683,19 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- Tool Bar -->
+    <!-- Toolbar -->
     <div class="toolbar">
-      <button class="tool-btn" :class="{ active: showStats }" @click="showStats = !showStats" title="Toggle stats cards">
+      <button class="tool-btn" :class="{ active: showStats }" @click="showStats = !showStats">
         <i class="bi bi-speedometer2"></i> Stats
       </button>
-      <button class="tool-btn" :class="{ active: showGrid }" @click="showGrid = !showGrid" title="Toggle grid">
+      <button class="tool-btn" :class="{ active: showGrid }" @click="showGrid = !showGrid">
         <i class="bi bi-grid-3x3"></i> Grid
       </button>
-      <button class="tool-btn" @click="clearSelection" v-if="selectedPoints.length" title="Clear point selection">
+      <button class="tool-btn" @click="clearSelection" v-if="selectedPoints.length">
         <i class="bi bi-x-circle"></i> Clear ({{ selectedPoints.length }})
       </button>
       <div style="flex: 1;"></div>
-      <span class="toolbar-info">💡 Ctrl+Click points • Scroll to zoom • Drag to pan</span>
+      <span class="toolbar-info">💡 Click chart to fullscreen • Ctrl+Click points • Scroll to zoom</span>
     </div>
 
     <!-- Stats Cards -->
@@ -526,23 +714,14 @@ onBeforeUnmount(() => {
 
       <div class="stat stat-pres">
         <div class="stat-label"><i class="bi bi-speedometer2"></i> Pressure</div>
-        <div class="stat-value">{{ avgPressure.toFixed(1) /1000 }} kPa</div>
-        <div class="stat-sub">Min: {{ minPressure.toFixed(1) }} · Max: {{ maxPressure.toFixed(1) }}</div>
+        <div class="stat-value">{{ (avgPressure / 1000).toFixed(2) }} kPa</div>
+        <div class="stat-sub">Min: {{ (minPressure / 1000).toFixed(2) }} · Max: {{ (maxPressure / 1000).toFixed(2) }}</div>
       </div>
 
       <div class="stat stat-count">
         <div class="stat-label"><i class="bi bi-graph-up"></i> Data Points</div>
         <div class="stat-value">{{ chartData.length }}</div>
         <div class="stat-sub">Range: {{ timeRange }} · Bucket: {{ bucketMinutes ? `${bucketMinutes}m` : 'raw' }}</div>
-      </div>
-
-      <div v-if="selectedPointStats" class="stat stat-selected">
-        <div class="stat-label"><i class="bi bi-hand-index-thumb"></i> Selected ({{ selectedPointStats.count }})</div>
-        <div class="stat-row">
-          <span class="stat-row-item">T: {{ selectedPointStats.tempAvg }}°C</span>
-          <span class="stat-row-item">H: {{ selectedPointStats.humAvg }}%</span>
-          <span class="stat-row-item">P: {{ selectedPointStats.presAvg /1000}} kPa</span>
-        </div>
       </div>
     </div>
 
@@ -565,7 +744,7 @@ onBeforeUnmount(() => {
     <!-- Pie Chart -->
     <div v-if="chartData.length && selectedVisualization === 'pie'" class="panel chart-panel">
       <h3 class="chart-title"><i class="bi bi-pie-chart"></i> Summary (Average Values)</h3>
-      <div class="chart-wrap">
+      <div class="chart-wrap-pie">
         <div class="pie-wrap">
           <svg viewBox="0 0 300 240" class="pie-svg">
             <circle cx="150" cy="120" r="80" fill="none" stroke="#2d3748" stroke-width="1" style="opacity: 0.35" />
@@ -587,95 +766,115 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- Charts Grid -->
+    <!-- Charts Grid with Axes -->
     <div v-else-if="chartData.length" class="charts-grid">
-      <!-- Temperature -->
+      <!-- Temperature Chart -->
       <div class="panel chart-panel">
-        <h3 class="chart-title"><i class="bi bi-thermometer-half"></i> Temperature Over Time</h3>
+        <div class="chart-header">
+          <h3 class="chart-title"><i class="bi bi-thermometer-half"></i> Temperature Over Time</h3>
+          <button class="btn-expand" @click="toggleFullscreen('temp')" title="Expand"><i class="bi bi-arrows-fullscreen"></i></button>
+        </div>
         <div class="chart-wrap" @wheel="handleWheel" @mousedown="startPan">
-          <svg :viewBox="`0 0 ${svgWidth} ${svgHeight}`" :style="svgTransformStyle">
-            <g v-if="showGrid" style="opacity: 0.12">
-              <line v-for="i in 10" :key="`t-h-${i}`" :x1="0" :y1="(svgHeight / 10) * i" :x2="svgWidth" :y2="(svgHeight / 10) * i" stroke="white" stroke-width="1" />
-              <line v-for="i in 15" :key="`t-v-${i}`" :x1="(svgWidth / 15) * i" :y1="0" :x2="(svgWidth / 15) * i" :y2="svgHeight" stroke="white" stroke-width="1" />
+          <svg :viewBox="`0 0 ${svgWidth} ${svgHeight}`">
+            <!-- Y-axis labels -->
+            <g v-for="label in tempYLabels" :key="`ty-${label.y}`">
+              <text :x="PADDING.left - 10" :y="label.y + 5" text-anchor="end" fill="#a0aec0" font-size="11">{{ label.value.toFixed(1) }}°C</text>
             </g>
+            
+            <!-- X-axis labels -->
+            <g v-for="(label, idx) in xLabels" :key="`tx-${idx}`">
+              <text :x="label.x" :y="PADDING.top + innerHeight + 20" text-anchor="middle" fill="#a0aec0" font-size="10" transform="translate(0,0)">{{ formatTs(label.time, true) }}</text>
+            </g>
+            
+            <g v-if="showGrid" style="opacity: 0.08">
+              <line v-for="i in 10" :key="`t-h-${i}`" :x1="PADDING.left" :y1="PADDING.top + (innerHeight / 10) * i" :x2="PADDING.left + innerWidth" :y2="PADDING.top + (innerHeight / 10) * i" stroke="white" stroke-width="1" />
+              <line v-for="i in 10" :key="`t-v-${i}`" :x1="PADDING.left + (innerWidth / 10) * i" :y1="PADDING.top" :x2="PADDING.left + (innerWidth / 10) * i" :y2="PADDING.top + innerHeight" stroke="white" stroke-width="1" />
+            </g>
+            
             <line :x1="PADDING.left" :y1="PADDING.top" :x2="PADDING.left" :y2="PADDING.top + innerHeight" stroke="#4a5568" stroke-width="2" />
             <line :x1="PADDING.left" :y1="PADDING.top + innerHeight" :x2="PADDING.left + innerWidth" :y2="PADDING.top + innerHeight" stroke="#4a5568" stroke-width="2" />
+            
             <path v-if="selectedVisualization === 'area'" :d="temperatureAreaPath" fill="#ef4444" style="opacity: 0.18" />
-            <polyline v-if="selectedVisualization === 'line' || selectedVisualization === 'area'" :points="temperatureLinePoints" fill="none" stroke="#ef4444" stroke-width="2.5" style="filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.6))" />
+            <polyline v-if="selectedVisualization === 'line' || selectedVisualization === 'area'" :points="temperatureLinePoints" fill="none" stroke="#ef4444" stroke-width="2.5" />
+            
             <template v-if="selectedVisualization === 'scatter' || selectedVisualization === 'line' || selectedVisualization === 'area'">
-              <circle v-for="p in temperatureSeries" :key="`t-pt-${p.i}`" :cx="p.x" :cy="p.y" :r="isPointSelected('temp', p.i) ? 7 : selectedVisualization === 'scatter' ? 6 : 4" :fill="isPointSelected('temp', p.i) ? '#fbbf24' : '#ef4444'" style="cursor: pointer; transition: all 0.2s ease" @click.ctrl="togglePointSelection('temp', p.i, p.v, null, null, p.t)" @mouseover="hoveredPoint = { type: 'temp', v: p.v, t: p.t }" @mouseout="hoveredPoint = null" />
+              <circle v-for="p in temperatureSeries" :key="`t-pt-${p.i}`" :cx="p.x" :cy="p.y" r="4" fill="#ef4444" style="cursor: pointer" @click.ctrl="togglePointSelection('temp', p.i, p.v, null, null, p.t)" @mouseover="hoveredPoint = { type: 'temp', v: p.v, t: p.t }" @mouseout="hoveredPoint = null" />
             </template>
+            
             <template v-if="selectedVisualization === 'bar'">
-              <rect v-for="b in tempBars" :key="`t-bar-${b.i}`" :x="b.x" :y="b.y" :width="b.w" :height="b.h" rx="3" :fill="isPointSelected('temp', b.i) ? '#fbbf24' : '#ef4444'" style="cursor: pointer; transition: all 0.2s ease" @click.ctrl="togglePointSelection('temp', b.i, b.v, null, null, b.t)" @mouseover="hoveredPoint = { type: 'temp', v: b.v, t: b.t }" @mouseout="hoveredPoint = null" />
+              <rect v-for="b in tempBars" :key="`t-bar-${b.i}`" :x="b.x" :y="b.y" :width="b.w" :height="b.h" rx="3" fill="#ef4444" style="cursor: pointer" @mouseover="hoveredPoint = { type: 'temp', v: b.v, t: b.t }" @mouseout="hoveredPoint = null" />
             </template>
           </svg>
-          <div v-if="hoveredPoint?.type === 'temp'" class="tooltip tooltip-temp">{{ hoveredPoint.v?.toFixed(2) }}°C<div class="tooltip-sub">{{ formatTs(hoveredPoint.t) }}</div></div>
-        </div>
-        <div class="zoom-row">
-          <button class="btn btn-primary btn-sm" @click="zoomIn"><i class="bi bi-zoom-in"></i></button>
-          <button class="btn btn-primary btn-sm" @click="zoomOut"><i class="bi bi-zoom-out"></i></button>
-          <button class="btn btn-muted btn-sm" @click="resetView"><i class="bi bi-arrow-counterclockwise"></i></button>
-          <span class="zoom-label">{{ (zoomLevel * 100).toFixed(0) }}%</span>
+          <div v-if="hoveredPoint?.type === 'temp'" class="tooltip tooltip-temp">
+            <div class="tooltip-value">{{ hoveredPoint.v?.toFixed(2) }}°C</div>
+            <div class="tooltip-sub">{{ formatTs(hoveredPoint.t) }}</div>
+          </div>
         </div>
       </div>
 
-      <!-- Humidity -->
+      <!-- Humidity Chart (similar structure) -->
       <div class="panel chart-panel">
-        <h3 class="chart-title"><i class="bi bi-droplet-half"></i> Humidity Over Time</h3>
+        <div class="chart-header">
+          <h3 class="chart-title"><i class="bi bi-droplet-half"></i> Humidity Over Time</h3>
+          <button class="btn-expand" @click="toggleFullscreen('hum')" title="Expand"><i class="bi bi-arrows-fullscreen"></i></button>
+        </div>
         <div class="chart-wrap" @wheel="handleWheel" @mousedown="startPan">
-          <svg :viewBox="`0 0 ${svgWidth} ${svgHeight}`" :style="svgTransformStyle">
-            <g v-if="showGrid" style="opacity: 0.12">
-              <line v-for="i in 10" :key="`h-h-${i}`" :x1="0" :y1="(svgHeight / 10) * i" :x2="svgWidth" :y2="(svgHeight / 10) * i" stroke="white" stroke-width="1" />
-              <line v-for="i in 15" :key="`h-v-${i}`" :x1="(svgWidth / 15) * i" :y1="0" :x2="(svgWidth / 15) * i" :y2="svgHeight" stroke="white" stroke-width="1" />
+          <svg :viewBox="`0 0 ${svgWidth} ${svgHeight}`">
+            <g v-for="label in humYLabels" :key="`hy-${label.y}`">
+              <text :x="PADDING.left - 10" :y="label.y + 5" text-anchor="end" fill="#a0aec0" font-size="11">{{ label.value.toFixed(1) }}%</text>
+            </g>
+            <g v-for="(label, idx) in xLabels" :key="`hx-${idx}`">
+              <text :x="label.x" :y="PADDING.top + innerHeight + 20" text-anchor="middle" fill="#a0aec0" font-size="10">{{ formatTs(label.time, true) }}</text>
+            </g>
+            <g v-if="showGrid" style="opacity: 0.08">
+              <line v-for="i in 10" :key="`h-h-${i}`" :x1="PADDING.left" :y1="PADDING.top + (innerHeight / 10) * i" :x2="PADDING.left + innerWidth" :y2="PADDING.top + (innerHeight / 10) * i" stroke="white" stroke-width="1" />
+              <line v-for="i in 10" :key="`h-v-${i}`" :x1="PADDING.left + (innerWidth / 10) * i" :y1="PADDING.top" :x2="PADDING.left + (innerWidth / 10) * i" :y2="PADDING.top + innerHeight" stroke="white" stroke-width="1" />
             </g>
             <line :x1="PADDING.left" :y1="PADDING.top" :x2="PADDING.left" :y2="PADDING.top + innerHeight" stroke="#4a5568" stroke-width="2" />
             <line :x1="PADDING.left" :y1="PADDING.top + innerHeight" :x2="PADDING.left + innerWidth" :y2="PADDING.top + innerHeight" stroke="#4a5568" stroke-width="2" />
             <path v-if="selectedVisualization === 'area'" :d="humidityAreaPath" fill="#3b82f6" style="opacity: 0.18" />
-            <polyline v-if="selectedVisualization === 'line' || selectedVisualization === 'area'" :points="humidityLinePoints" fill="none" stroke="#3b82f6" stroke-width="2.5" style="filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.6))" />
+            <polyline v-if="selectedVisualization === 'line' || selectedVisualization === 'area'" :points="humidityLinePoints" fill="none" stroke="#3b82f6" stroke-width="2.5" />
             <template v-if="selectedVisualization === 'scatter' || selectedVisualization === 'line' || selectedVisualization === 'area'">
-              <circle v-for="p in humiditySeries" :key="`h-pt-${p.i}`" :cx="p.x" :cy="p.y" :r="isPointSelected('hum', p.i) ? 7 : selectedVisualization === 'scatter' ? 6 : 4" :fill="isPointSelected('hum', p.i) ? '#fbbf24' : '#3b82f6'" style="cursor: pointer; transition: all 0.2s ease" @click.ctrl="togglePointSelection('hum', p.i, null, p.v, null, p.t)" @mouseover="hoveredPoint = { type: 'hum', v: p.v, t: p.t }" @mouseout="hoveredPoint = null" />
-            </template>
-            <template v-if="selectedVisualization === 'bar'">
-              <rect v-for="b in humBars" :key="`h-bar-${b.i}`" :x="b.x" :y="b.y" :width="b.w" :height="b.h" rx="3" :fill="isPointSelected('hum', b.i) ? '#fbbf24' : '#3b82f6'" style="cursor: pointer; transition: all 0.2s ease" @click.ctrl="togglePointSelection('hum', b.i, null, b.v, null, b.t)" @mouseover="hoveredPoint = { type: 'hum', v: b.v, t: b.t }" @mouseout="hoveredPoint = null" />
+              <circle v-for="p in humiditySeries" :key="`h-pt-${p.i}`" :cx="p.x" :cy="p.y" r="4" fill="#3b82f6" style="cursor: pointer" @mouseover="hoveredPoint = { type: 'hum', v: p.v, t: p.t }" @mouseout="hoveredPoint = null" />
             </template>
           </svg>
-          <div v-if="hoveredPoint?.type === 'hum'" class="tooltip tooltip-hum">{{ hoveredPoint.v?.toFixed(2) }}%<div class="tooltip-sub">{{ formatTs(hoveredPoint.t) }}</div></div>
-        </div>
-        <div class="zoom-row">
-          <button class="btn btn-primary btn-sm" @click="zoomIn"><i class="bi bi-zoom-in"></i></button>
-          <button class="btn btn-primary btn-sm" @click="zoomOut"><i class="bi bi-zoom-out"></i></button>
-          <button class="btn btn-muted btn-sm" @click="resetView"><i class="bi bi-arrow-counterclockwise"></i></button>
-          <span class="zoom-label">{{ (zoomLevel * 100).toFixed(0) }}%</span>
+          <div v-if="hoveredPoint?.type === 'hum'" class="tooltip tooltip-hum">
+            <div class="tooltip-value">{{ hoveredPoint.v?.toFixed(2) }}%</div>
+            <div class="tooltip-sub">{{ formatTs(hoveredPoint.t) }}</div>
+          </div>
         </div>
       </div>
 
-      <!-- Pressure -->
+      <!-- Pressure Chart (similar structure) -->
       <div class="panel chart-panel chart-span">
-        <h3 class="chart-title"><i class="bi bi-speedometer2"></i> Pressure Over Time</h3>
+        <div class="chart-header">
+          <h3 class="chart-title"><i class="bi bi-speedometer2"></i> Pressure Over Time</h3>
+          <button class="btn-expand" @click="toggleFullscreen('pres')" title="Expand"><i class="bi bi-arrows-fullscreen"></i></button>
+        </div>
         <div class="chart-wrap" @wheel="handleWheel" @mousedown="startPan">
-          <svg :viewBox="`0 0 ${svgWidth} ${svgHeight}`" :style="svgTransformStyle">
-            <g v-if="showGrid" style="opacity: 0.12">
-              <line v-for="i in 10" :key="`p-h-${i}`" :x1="0" :y1="(svgHeight / 10) * i" :x2="svgWidth" :y2="(svgHeight / 10) * i" stroke="white" stroke-width="1" />
-              <line v-for="i in 15" :key="`p-v-${i}`" :x1="(svgWidth / 15) * i" :y1="0" :x2="(svgWidth / 15) * i" :y2="svgHeight" stroke="white" stroke-width="1" />
+          <svg :viewBox="`0 0 ${svgWidth} ${svgHeight}`">
+            <g v-for="label in presYLabels" :key="`py-${label.y}`">
+              <text :x="PADDING.left - 10" :y="label.y + 5" text-anchor="end" fill="#a0aec0" font-size="11">{{ (label.value / 1000).toFixed(2) }} kPa</text>
+            </g>
+            <g v-for="(label, idx) in xLabels" :key="`px-${idx}`">
+              <text :x="label.x" :y="PADDING.top + innerHeight + 20" text-anchor="middle" fill="#a0aec0" font-size="10">{{ formatTs(label.time, true) }}</text>
+            </g>
+            <g v-if="showGrid" style="opacity: 0.08">
+              <line v-for="i in 10" :key="`p-h-${i}`" :x1="PADDING.left" :y1="PADDING.top + (innerHeight / 10) * i" :x2="PADDING.left + innerWidth" :y2="PADDING.top + (innerHeight / 10) * i" stroke="white" stroke-width="1" />
+              <line v-for="i in 10" :key="`p-v-${i}`" :x1="PADDING.left + (innerWidth / 10) * i" :y1="PADDING.top" :x2="PADDING.left + (innerWidth / 10) * i" :y2="PADDING.top + innerHeight" stroke="white" stroke-width="1" />
             </g>
             <line :x1="PADDING.left" :y1="PADDING.top" :x2="PADDING.left" :y2="PADDING.top + innerHeight" stroke="#4a5568" stroke-width="2" />
             <line :x1="PADDING.left" :y1="PADDING.top + innerHeight" :x2="PADDING.left + innerWidth" :y2="PADDING.top + innerHeight" stroke="#4a5568" stroke-width="2" />
             <path v-if="selectedVisualization === 'area'" :d="pressureAreaPath" fill="#10b981" style="opacity: 0.18" />
-            <polyline v-if="selectedVisualization === 'line' || selectedVisualization === 'area'" :points="pressureLinePoints" fill="none" stroke="#10b981" stroke-width="2.5" style="filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.6))" />
+            <polyline v-if="selectedVisualization === 'line' || selectedVisualization === 'area'" :points="pressureLinePoints" fill="none" stroke="#10b981" stroke-width="2.5" />
             <template v-if="selectedVisualization === 'scatter' || selectedVisualization === 'line' || selectedVisualization === 'area'">
-              <circle v-for="p in pressureSeries" :key="`p-pt-${p.i}`" :cx="p.x" :cy="p.y" :r="isPointSelected('pres', p.i) ? 7 : selectedVisualization === 'scatter' ? 6 : 4" :fill="isPointSelected('pres', p.i) ? '#fbbf24' : '#10b981'" style="cursor: pointer; transition: all 0.2s ease" @click.ctrl="togglePointSelection('pres', p.i, null, null, p.v, p.t)" @mouseover="hoveredPoint = { type: 'pres', v: p.v, t: p.t }" @mouseout="hoveredPoint = null" />
-            </template>
-            <template v-if="selectedVisualization === 'bar'">
-              <rect v-for="b in presBars" :key="`p-bar-${b.i}`" :x="b.x" :y="b.y" :width="b.w" :height="b.h" rx="3" :fill="isPointSelected('pres', b.i) ? '#fbbf24' : '#10b981'" style="cursor: pointer; transition: all 0.2s ease" @click.ctrl="togglePointSelection('pres', b.i, null, null, b.v, b.t)" @mouseover="hoveredPoint = { type: 'pres', v: b.v, t: b.t }" @mouseout="hoveredPoint = null" />
+              <circle v-for="p in pressureSeries" :key="`p-pt-${p.i}`" :cx="p.x" :cy="p.y" r="4" fill="#10b981" style="cursor: pointer" @mouseover="hoveredPoint = { type: 'pres', v: p.v, t: p.t }" @mouseout="hoveredPoint = null" />
             </template>
           </svg>
-          <div v-if="hoveredPoint?.type === 'pres'" class="tooltip tooltip-pres">{{ (hoveredPoint.v / 1000)?.toFixed(2) }} kPa<div class="tooltip-sub">{{ formatTs(hoveredPoint.t) }}</div></div>
-        </div>
-        <div class="zoom-row">
-          <button class="btn btn-primary btn-sm" @click="zoomIn"><i class="bi bi-zoom-in"></i></button>
-          <button class="btn btn-primary btn-sm" @click="zoomOut"><i class="bi bi-zoom-out"></i></button>
-          <button class="btn btn-muted btn-sm" @click="resetView"><i class="bi bi-arrow-counterclockwise"></i></button>
-          <span class="zoom-label">{{ (zoomLevel * 100).toFixed(0) }}%</span>
+          <div v-if="hoveredPoint?.type === 'pres'" class="tooltip tooltip-pres">
+            <div class="tooltip-value">{{ (hoveredPoint.v / 1000)?.toFixed(2) }} kPa</div>
+            <div class="tooltip-sub">{{ formatTs(hoveredPoint.t) }}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -710,9 +909,6 @@ onBeforeUnmount(() => {
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-primary { background: #3182ce; color: #fff; }
 .btn-primary:hover:not(:disabled) { background: #2563eb; box-shadow: 0 0 14px rgba(49, 130, 206, 0.45); transform: translateY(-1px); }
-.btn-muted { background: #718096; color: #fff; }
-.btn-muted:hover { background: #4a5568; transform: translateY(-1px); }
-.btn-sm { padding: 8px 12px; font-size: 12px; border-radius: 5px; }
 .error { margin-top: 15px; padding: 12px; background: #742a2a; border: 1px solid #9b2c2c; border-radius: 6px; color: #fc8181; display: flex; align-items: center; gap: 8px; }
 .toolbar { display: flex; gap: 12px; align-items: center; padding: 12px 16px; background: linear-gradient(135deg, #2d3a5f 0%, #1f2948 100%); border: 1px solid #3d4a6f; border-radius: 10px; margin-bottom: 20px; flex-wrap: wrap; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
 .tool-btn { padding: 6px 12px; background: #2d3748; color: #a0aec0; border: 1px solid #4a5568; border-radius: 5px; cursor: pointer; font-size: 12px; transition: all 0.2s ease; display: flex; align-items: center; gap: 6px; }
@@ -726,12 +922,9 @@ onBeforeUnmount(() => {
 .stat-hum { background: linear-gradient(135deg, #0dcaf0 0%, #0d6efd 100%); }
 .stat-pres { background: linear-gradient(135deg, #20c997 0%, #198754 100%); }
 .stat-count { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
-.stat-selected { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
 .stat-label { font-size: 14px; opacity: 0.9; margin-bottom: 8px; font-weight: 700; }
 .stat-value { font-size: 30px; font-weight: 900; margin-bottom: 8px; }
 .stat-sub { font-size: 12px; opacity: 0.85; }
-.stat-row { display: flex; gap: 12px; font-size: 12px; flex-wrap: wrap; }
-.stat-row-item { background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px; }
 .viz-panel { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .viz-title { color: #a0aec0; font-weight: 800; margin-right: 10px; }
 .viz-btn { padding: 10px 14px; background: #2d3748; color: #fff; border: 1px solid #4a5568; border-radius: 8px; cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; gap: 8px; transition: all 0.15s ease; }
@@ -742,25 +935,47 @@ onBeforeUnmount(() => {
 .chart-panel { transition: box-shadow 0.2s ease; }
 .chart-panel:hover { box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
 .chart-span { grid-column: 1 / -1; }
-.chart-title { color: #e2e8f0; margin: 0 0 12px 0; font-size: 16px; font-weight: 800; }
+.chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.chart-title { color: #e2e8f0; margin: 0; font-size: 16px; font-weight: 800; }
+.btn-expand { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 6px; color: #fff; cursor: pointer; transition: all 0.2s; }
+.btn-expand:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
 .chart-wrap { height: 350px; background: linear-gradient(135deg, #0f1419 0%, #1a1f3a 100%); border-radius: 8px; overflow: hidden; position: relative; cursor: grab; border: 1px solid #2d3a5f; }
 .chart-wrap:active { cursor: grabbing; }
-.tooltip { position: absolute; bottom: 18px; left: 18px; background: rgba(0,0,0,0.82); padding: 10px 14px; border-radius: 6px; font-weight: 800; border: 1px solid #4a5568; animation: slideIn 0.2s ease; }
+.chart-wrap-pie { height: 350px; background: linear-gradient(135deg, #0f1419 0%, #1a1f3a 100%); border-radius: 8px; overflow: hidden; position: relative; border: 1px solid #2d3a5f; display: flex; align-items: center; justify-content: center; }
+.tooltip { position: absolute; bottom: 18px; left: 18px; background: rgba(0,0,0,0.9); padding: 12px 16px; border-radius: 8px; border: 1px solid #4a5568; animation: slideIn 0.2s ease; pointer-events: none; }
 @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-.tooltip-sub { font-size: 11px; opacity: 0.8; margin-top: 4px; font-weight: 600; }
+.tooltip-value { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
+.tooltip-sub { font-size: 11px; opacity: 0.8; font-weight: 600; }
 .tooltip-temp { color: #ef4444; border-color: rgba(239, 68, 68, 0.7); }
 .tooltip-hum { color: #3b82f6; border-color: rgba(59, 130, 246, 0.7); }
 .tooltip-pres { color: #10b981; border-color: rgba(16, 185, 129, 0.7); }
-.zoom-row { display: flex; gap: 10px; margin-top: 14px; justify-content: center; align-items: center; flex-wrap: wrap; }
-.zoom-label { color: #a0aec0; font-size: 12px; font-weight: 700; }
 .empty { padding: 60px; text-align: center; }
 .empty-icon { font-size: 48px; color: #4a5568; display: block; margin-bottom: 18px; }
 .empty-text { color: #a0aec0; font-size: 18px; margin: 0; }
-.pie-wrap { position: relative; width: 300px; height: 300px; margin: 0 auto; display: flex; align-items: center; justify-content: center; }
+.pie-wrap { position: relative; width: 300px; height: 300px; display: flex; align-items: center; justify-content: center; }
 .pie-svg { width: 100%; height: 100%; }
-.pie-seg { opacity: 0.85; cursor: pointer; transition: opacity 0.15s ease, transform 0.15s ease; }
+.pie-seg { opacity: 0.85; cursor: pointer; transition: opacity 0.15s ease; }
 .pie-seg:hover { opacity: 1; filter: brightness(1.1); }
 .pie-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #fff; }
 .pie-label { font-size: 14px; opacity: 0.85; font-weight: 700; }
 .pie-pct { font-size: 22px; font-weight: 900; }
-</style> 
+
+/* Fullscreen overlay */
+.fullscreen-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.fullscreen-chart-wrapper { width: 95%; max-width: 1600px; height: 90%; position: relative; }
+.close-fullscreen { position: absolute; top: -40px; right: 0; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: #fff; padding: 10px 16px; border-radius: 8px; cursor: pointer; font-size: 18px; transition: all 0.2s; z-index: 10000; }
+.close-fullscreen:hover { background: rgba(255,255,255,0.2); transform: scale(1.1); }
+.fullscreen-chart { width: 100%; height: 100%; background: linear-gradient(135deg, #1a1f3a 0%, #0f1419 100%); border-radius: 12px; padding: 30px; overflow: hidden; }
+.fs-chart-title { color: #fff; font-size: 28px; margin-bottom: 20px; }
+.fs-chart-wrap { height: calc(100% - 60px); position: relative; }
+.fs-tooltip { position: absolute; bottom: 30px; left: 30px; background: rgba(0,0,0,0.9); padding: 16px 20px; border-radius: 10px; pointer-events: none; }
+.fs-tooltip-temp { border: 2px solid #ef4444; }
+.fs-tooltip-hum { border: 2px solid #3b82f6; }
+.fs-tooltip-pres { border: 2px solid #10b981; }
+.fs-tooltip-value { font-size: 32px; font-weight: 900; margin-bottom: 6px; }
+.fs-tooltip-temp .fs-tooltip-value { color: #ef4444; }
+.fs-tooltip-hum .fs-tooltip-value { color: #3b82f6; }
+.fs-tooltip-pres .fs-tooltip-value { color: #10b981; }
+.fs-tooltip-time { font-size: 14px; color: #a0aec0; }
+</style>

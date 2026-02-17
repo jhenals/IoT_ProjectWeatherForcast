@@ -72,7 +72,7 @@ def main():
     features, mean, std, labels = load_preprocess(PREPROCESS_PATH)
 
     interpreter = Interpreter(model_path=MODEL_PATH)
-    interpreter.allocate_tensors()
+    interpreter.allocate_tensors() 
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
 
