@@ -25,38 +25,6 @@ A comprehensive full-stack IoT weather monitoring and prediction system designed
 
 ---
 
-## 🏗️ System Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Smart Park Weather System                     │
-└─────────────────────────────────────────────────────────────────┘
-
-┌──────────────┐      ┌──────────────┐      ┌──────────────┐
-│   Sensors    │─────▶│  Robustel    │─────▶│   InfluxDB   │
-│  (IoT Data)  │      │  EG5120 GW   │      │  (Time Series)│
-└──────────────┘      └──────────────┘      └──────────────┘
-                             │                      │
-                             │ TFLite Model         │
-                             ▼                      ▼
-                      ┌──────────────┐      ┌──────────────┐
-                      │  Node-RED    │      │   FastAPI    │
-                      │  (Inference) │      │   Backend    │
-                      └──────────────┘      └──────────────┘
-                             │                      │
-                             └──────────┬───────────┘
-                                        ▼
-                                ┌──────────────┐
-                                │   Vue.js     │
-                                │  Frontend    │
-                                │  Dashboard   │
-                                └──────────────┘
-                                        │
-                           ┌────────────┼────────────┐
-                           ▼            ▼            ▼
-                     [Maps View]  [RAG Chat]  [Analytics]
-```
-
 ### Data Flow
 
 ```
@@ -219,7 +187,7 @@ npm run dev
 
 ### 4️⃣ Edge ML Deployment (Robustel EG5120)
 
-#### Install TFLite Runtime on Gateway
+#### Install ai_edge_litert (TFLite) Runtime on Gateway
 
 SSH into your Robustel EG5120:
 
@@ -230,7 +198,7 @@ ssh admin@<gateway-ip>
 Install dependencies:
 
 ```bash
-pip install tflite-runtime
+pip install tflite-runtime or ai_edge_litert
 # If not available:
 pip install tensorflow
 ```
@@ -490,13 +458,12 @@ Response: { transcript, answer }
 
 ## 🔐 Security Best Practices
 
-1. ✅ **Never commit** `.env` to version control
-2. ✅ **Use environment variables** for all secrets
-3. ✅ **Implement rate limiting** in production
-4. ✅ **Validate inputs** on backend (Pydantic schemas)
-5. ✅ **Set CORS policies** appropriately
-6. ✅ **Use HTTPS** in production
-7. ✅ **Rotate API keys** regularly
+1. ✅ **Use environment variables** for all secrets
+2. ✅ **Implement rate limiting** in production
+3. ✅ **Validate inputs** on backend (Pydantic schemas)
+4. ✅ **Set CORS policies** appropriately
+5. ✅ **Use HTTPS** in production
+6. ✅ **Rotate API keys** regularly
 
 ---
 
@@ -510,9 +477,6 @@ Response: { transcript, answer }
 ```bash
 # Check InfluxDB is running
 systemctl status influxdb
-
-# Verify credentials in .env
-cat .env | grep INFLUX
 ```
 
 ---
@@ -525,62 +489,6 @@ cat .env | grep INFLUX
 - Consider paid tier for higher limits
 
 ---
-
-### Edge ML Issues
-
-**Problem:** TFLite model not found
-
-**Solution:**
-```bash
-# Verify files on gateway
-ls -lh /home/admin/*.tflite
-ls -lh /home/admin/preprocess.json
-
-# Check paths in predictor.py
-grep "model_path" predictor.py
-```
-
----
-
-**Problem:** Inference errors
-
-**Solution:**
-```bash
-# Test locally first
-cd "Robustel EG5120 ML"
-python predictor.py < test_input.json
-
-# Check Python version (requires 3.7+)
-python --version
-```
-
----
-
-### Frontend Issues
-
-**Problem:** Map not loading
-
-**Solution:**
-```javascript
-// Check Leaflet CSS is imported
-import 'leaflet/dist/leaflet.css'
-
-// Verify map container has height
-#map-container { height: 400px; }
-```
-
----
-
-**Problem:** Voice recording not working
-
-**Solution:**
-- Browser requires HTTPS or localhost
-- Check microphone permissions
-- Try different audio format (WAV instead of WebM)
-- Verify `navigator.mediaDevices` is available
-
----
-
 ## 📈 Monitoring & Visualization
 
 ### Grafana Dashboard
@@ -616,12 +524,6 @@ Import `Robustel EG5120/new_-grafana.json` into Grafana:
 
 ---
 
-## 📝 License
-
-[Your License Here - e.g., MIT, Apache 2.0]
-
----
-
 ## 🙏 Acknowledgments
 
 - **Robustel** - EG5120 IoT Gateway hardware
@@ -632,49 +534,3 @@ Import `Robustel EG5120/new_-grafana.json` into Grafana:
 - **Vue.js** - Progressive JavaScript framework
 
 ---
-
-## 📞 Support & Contact
-
-- **GitHub Issues:** [Report bugs](https://github.com/yonasyifter/IoT_ProjectWeatherForcast/issues)
-- **Groq Discord:** Community support
-- **Email:** [your-email@example.com]
-
----
-
-## 🎯 Roadmap
-
-### Current Version (v1.0)
-- ✅ Real-time sensor monitoring
-- ✅ Edge ML weather prediction
-- ✅ Voice AI assistant
-- ✅ Interactive map visualization
-
-### Planned Features (v2.0)
-- 🔄 Historical data analytics
-- 🔄 Weather alerts & notifications
-- 🔄 Multi-park deployment support
-- 🔄 Mobile app (React Native)
-- 🔄 Advanced forecasting (LSTM models)
-- 🔄 Integration with external weather APIs
-
----
-
-## 📊 System Requirements
-
-### Development Environment
-- **RAM:** 8GB minimum, 16GB recommended
-- **Storage:** 10GB free space
-- **OS:** Windows 10+, macOS 10.14+, Ubuntu 20.04+
-
-### Production Environment
-- **Backend Server:** 2 vCPU, 4GB RAM
-- **Database:** InfluxDB 2.x (SSD recommended)
-- **Gateway:** Robustel EG5120 (ARM Cortex-A8)
-
----
-
-**Built with ⚡ Groq | 🧠 TensorFlow | 🌐 FastAPI | 🎨 Vue.js | 📡 Robustel EG5120**
-
----
-
-*Last Updated: February 2026*

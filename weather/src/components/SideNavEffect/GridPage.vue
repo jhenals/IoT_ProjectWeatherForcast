@@ -831,8 +831,8 @@ onBeforeUnmount(() => {
               :points="temperatureLinePoints"
               fill="none"
               stroke="#ff9b3d"
-              stroke-width="2"
-              style="filter: drop-shadow(0 0 3px rgba(255, 155, 61, 0.5))"
+              stroke-width="0.5"
+              style="filter: drop-shadow(0 0 0.5px rgba(255, 155, 61, 0.5))"
             />
 
             <!-- Humidity Line -->
@@ -841,8 +841,8 @@ onBeforeUnmount(() => {
               :points="humidityLinePoints"
               fill="none"
               stroke="#3d9fff"
-              stroke-width="2"
-              style="filter: drop-shadow(0 0 3px rgba(61, 159, 255, 0.5))"
+              stroke-width="0.5"
+              style="filter: drop-shadow(0 0 0.5px rgba(61, 159, 255, 0.5))"
             />
 
             <!-- Temperature Points -->
@@ -929,7 +929,7 @@ onBeforeUnmount(() => {
       </section>
 
       <!-- Humidity Gauge -->
-      <section class="panel gauge-panel">
+      <section class="panel gauge-panel-humidity">
         <h3 class="chart-title">
           <i class="bi bi-droplet-half"></i> Humidity
         </h3>
@@ -965,7 +965,7 @@ onBeforeUnmount(() => {
         <h3 class="chart-title">
           <i class="bi bi-soundwave"></i> Sound Level
         </h3>
-        <div class="chart-wrap">
+        <div class="chart-wrap-noise">
           <svg :viewBox="`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`">
             <!-- Grid Lines -->
             <g style="opacity: 0.08">
@@ -1530,10 +1530,18 @@ onBeforeUnmount(() => {
 }
 
 .gauge-panel {
+  grid-column: span 8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.gauge-panel-humidity {
   grid-column: span 4;
   display: flex;
   flex-direction: column;
   align-items: center;
+  
 }
 
 .chart-panel-wide {
@@ -1633,16 +1641,24 @@ onBeforeUnmount(() => {
 
 /* Charts */
 .chart-wrap {
-  height: 220px;
+  height: 360px;
   background: var(--panel-2);
   border: 1px solid var(--panel-border);
   border-radius: 6px;
   overflow: hidden;
   position: relative;
 }
+.chart-wrap-noise {
+  height: 460px;
+  background: var(--panel-2);
+  border: 0.5px solid var(--panel-border);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
 
 .chart-point {
-  opacity: 0.7;
+  opacity: 0.5;
   cursor: pointer;
   transition: opacity 0.2s ease;
 }
