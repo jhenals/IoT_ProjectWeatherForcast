@@ -1,15 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from app.routes.weather import router as weather_router
 from app.routes.rag import router as rag_router
-from app.routes.auth import router as auth_router 
-from app.database import create_db               
+from app.routes.auth import router as auth_router
+from app.database import create_db
 import os
 import google.generativeai as genai
 from app.config import GROQ_API_KEY
-
 
 
 @asynccontextmanager
@@ -44,7 +44,16 @@ app.include_router(weather_router, prefix="/api/weather", tags=["weather"])
 app.include_router(rag_router, prefix="/api/rag", tags=["AI Assistant"])
 app.include_router(auth_router)
 
-# 5. Lightweight Health Check
+# 5. Mount static files
+# Serve the web-app (public landing page)
+app.mount("/web-app", StaticFiles(directory="../static/web-app",
+          html=True), name="web-app")
+
+# Serve the Vue.js admin dashboard
+app.mount("/dashboard", StaticFiles(directory="../static/weather",
+          html=True), name="dashboard")
+
+# 6. Lightweight Health Check
 
 
 @app.get("/health", include_in_schema=False)

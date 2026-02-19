@@ -1,6 +1,6 @@
-<!-- Updated App.vue with Authentication Gate -->
+<!-- Updated App.vue - Direct Dashboard Access -->
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 
 // Pages
 import SensorDashboardPage from './pages/SensorDashboardPage.vue'
@@ -13,62 +13,27 @@ import GearPage from './components/SideNavEffect/GearPage.vue'
 import GridPage from './components/SideNavEffect/GridPage.vue'
 import UploadPage from './components/SideNavEffect/UploadPage.vue'
 
-// Auth pages
-import LoginPage from './LogInPage/LoginPage.vue'
-import RegisterPage from './LogInPage/RegisterPage.vue'
-
 // Layout
 import Sidebar from './components/layout/SidebarNav.vue'
 
-// ── Auth state ──────────────────────────────────────────────
-// 'login' | 'register' | 'app'
-const authView = ref('login')
-const currentUser = ref(null)
+// ── Navigation state ──────────────────────────────────────────────
 const currentPage = ref('dashboard')
 
-// On mount, check if a token is already saved (user was previously logged in)
-onMounted(() => {
-  const token = localStorage.getItem('access_token')
-  const username = localStorage.getItem('username')
-  if (token && username) {
-    currentUser.value = { token, username }
-    authView.value = 'app'
-  }
-})
-
-function onLoginSuccess({ token, username }) {
-  currentUser.value = { token, username }
-  authView.value = 'app'
+function navigateTo(page) {
+  currentPage.value = page
 }
 
 function logout() {
   localStorage.removeItem('access_token')
   localStorage.removeItem('username')
-  currentUser.value = null
-  authView.value = 'login'
-  currentPage.value = 'dashboard'
-}
-
-function navigateTo(page) {
-  currentPage.value = page
+  // Redirect to web-app landing page
+  window.location.href = 'http://127.0.0.1:5500/web-app/index.html'
 }
 </script>
 
 <template>
-  <!-- ── AUTH VIEWS ─────────────────────────────────────── -->
-  <LoginPage
-    v-if="authView === 'login'"
-    @login-success="onLoginSuccess"
-    @go-register="authView = 'register'"
-  />
-
-  <RegisterPage
-    v-else-if="authView === 'register'"
-    @go-login="authView = 'login'"
-  />
-
-  <!-- ── MAIN APP (shown only when logged in) ───────────── -->
-  <div v-else class="d-flex">
+  <!-- ── MAIN APP ───────────── -->
+  <div class="d-flex">
     <!-- Sidebar -->
     <Sidebar @navigate="navigateTo" />
 
@@ -117,10 +82,7 @@ function navigateTo(page) {
             <!-- Divider -->
             <div style="width:1px;height:24px;background:rgba(255,255,255,0.15);margin:0 4px;"></div>
 
-            <!-- Logged-in user + logout -->
-            <span class="text-white-50 small me-1">
-              <i class="bi bi-person-fill me-1"></i>{{ currentUser?.username }}
-            </span>
+            <!-- Logout button -->
             <button class="btn btn-sm btn-outline-danger" @click="logout">
               <i class="bi bi-box-arrow-right me-1"></i>Logout
             </button>
