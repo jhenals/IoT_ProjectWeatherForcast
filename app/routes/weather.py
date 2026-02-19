@@ -1,17 +1,17 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from typing import List, Dict, Any
-from schemas import WeatherPoint
-from influx import query as influx_query
-from config import INFLUXDB_BUCKET, INFLUXDB_Measurement as meas
+from app.schemas import WeatherPoint
+from app.influx import query as influx_query
+from app.config import INFLUXDB_BUCKET, INFLUXDB_Measurement as meas
+from app.auth import get_current_user
 
-router = APIRouter(prefix="/api/weather", tags=["weather"])
-
-
+router = APIRouter(prefix="")
 @router.get("/forecast/", response_model=List[WeatherPoint])
 def get_weather_forecast(
     # device_id: str,
     minutes: int = Query(60, ge=1, le=7*24*60),
-        measurement: str = Query(meas),):
+    current_user: str = Depends(get_current_user),  
+    measurement: str = Query(meas),):
     # Flux query: filter by time range, measurement, and device_id tag
     flux = f'''
 from(bucket: "{INFLUXDB_BUCKET}")

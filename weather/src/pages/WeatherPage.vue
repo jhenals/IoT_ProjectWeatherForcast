@@ -29,16 +29,17 @@ const weatherData = ref({
   pressure: '—',
   light: '—',
   noise: '—',
-  icon: '🌤️'
+  icon: '🌤️',
+  weatherPrediction: '—',
+  predictionConfidence: 0
 })
 
 const nearbyLocations = ref([])
 
 // Configuration
 const availableMeasurements = [
-  { measurement: 'Sensor_S6000U_data1', device_id: 101 },
-  { measurement: 'Sensor_S6000U_data2', device_id: 102 },
-  { measurement: 'Sensor_S6000U_data3', device_id: 103 },
+  { measurement: 'Sensor_S6000U_data2', device_id: '' },
+
 ]
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
@@ -66,7 +67,33 @@ function celsiusToFahrenheit(celsius) {
   return Math.round(celsius * 9/5 + 32)
 }
 
-function getWeatherCondition(tempF) {
+function getWeatherIcon(prediction) {
+  if (!prediction || prediction === '—') return '🌤️'
+  
+  const pred = prediction.toLowerCase()
+  if (pred.includes('clear')) return '☀️'
+  if (pred.includes('sunny')) return '☀️'
+  if (pred.includes('partly cloudy')) return '⛅'
+  if (pred.includes('mostly cloudy')) return '☁️'
+  if (pred.includes('cloudy')) return '☁️'
+  if (pred.includes('overcast')) return '☁️'
+  if (pred.includes('rain')) return '🌧️'
+  if (pred.includes('storm')) return '⛈️'
+  if (pred.includes('snow')) return '❄️'
+  if (pred.includes('fog')) return '🌫️'
+  
+  return '🌤️'
+}
+
+function getWeatherCondition(tempF, prediction) {
+  // Use prediction if available, otherwise fall back to temperature-based condition
+  if (prediction && prediction !== '—') {
+    return { 
+      condition: prediction, 
+      icon: getWeatherIcon(prediction) 
+    }
+  }
+  
   if (tempF > 80) return { condition: 'Hot', icon: '☀️' }
   if (tempF > 65) return { condition: 'Warm', icon: '🌤️' }
   if (tempF > 50) return { condition: 'Mild', icon: '⛅' }
@@ -255,6 +282,12 @@ function updateMapMarkers() {
           <div class="mb-1">
             💡 Light: <strong>${device.light}</strong>
           </div>
+          ${device.weatherPrediction ? `
+          <div class="mb-1">
+            🌤️ Forecast: <strong>${device.weatherPrediction}</strong>
+            <br><small class="text-muted">Confidence: ${(device.predictionConfidence * 100).toFixed(1)}%</small>
+          </div>
+          ` : ''}
           <div class="mt-2 pt-2 border-top">
             <small class="text-muted">📍 ${device.latitude.toFixed(4)}, ${device.longitude.toFixed(4)}</small>
           </div>
@@ -307,16 +340,24 @@ async function fetchDevices() {
   try {
     const devicePromises = availableMeasurements.map(async (device) => {
       try {
-        const res = await fetch(
-          `${API_BASE}/api/weather/forecast/?minutes=60&measurement=${device.measurement}`
-        )
-        
+        //const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=60&measurement=${device.measurement}`)
+        const token = localStorage.getItem('access_token')
+        const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=60&measurement=${device.measurement}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
         if (!res.ok) return null
         
         const data = await res.json()
         if (!Array.isArray(data) || data.length === 0) return null
         
+        // Get the latest reading (last item in array)
         const latest = data[data.length - 1]
+        
+        // Skip if no timestamp
+        if (!latest.time) return null
+        
         const locationName = await queueGeocode(latest.latitude, latest.longitude)
         
         return {
@@ -332,6 +373,8 @@ async function fetchDevices() {
           longitude: latest.longitude,
           light: latest.light,
           noise: latest.noise,
+          weatherPrediction: latest.weather_prediction || '—',
+          predictionConfidence: latest.prediction_confidence || 0,
           lastUpdate: latest.time
         }
       } catch (e) {
@@ -357,9 +400,12 @@ async function fetchWeatherData(measurement = 'Sensor_S6000U_data2') {
     loading.value = true
     error.value = ''
     
-    const res = await fetch(
-      `${API_BASE}/api/weather/forecast/?minutes=60&measurement=${measurement}`
-    )
+    const token = localStorage.getItem('access_token')
+    const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=60&measurement=${measurement}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
     
     if (!res.ok) throw new Error(`API Error: ${res.status} ${res.statusText}`)
     
@@ -369,13 +415,22 @@ async function fetchWeatherData(measurement = 'Sensor_S6000U_data2') {
       throw new Error('No weather data available')
     }
     
+    // Get the latest reading (last item in array)
     const latest = data[data.length - 1]
+    
+    // Skip if no timestamp
+    if (!latest.time) {
+      throw new Error('No valid weather data with timestamp')
+    }
+    
     const tempF = celsiusToFahrenheit(latest.temperature)
-    const { condition, icon } = getWeatherCondition(tempF)
+    const weatherPrediction = latest.weather_prediction || '—'
+    const predictionConfidence = latest.prediction_confidence || 0
+    const { condition, icon } = getWeatherCondition(tempF, weatherPrediction)
     
     weatherData.value = {
       temperature: tempF,
-      feelsLike: tempF - 2, // Simple feels-like calculation
+      feelsLike: weatherPrediction, // Use weather prediction as "feels like"
       condition,
       icon,
       humidity: latest.humidity,
@@ -383,7 +438,9 @@ async function fetchWeatherData(measurement = 'Sensor_S6000U_data2') {
       light: latest.light,
       noise: latest.noise,
       airQuality: estimateAirQuality(latest.noise),
-      description: `Temperature: ${latest.temperature.toFixed(1)}°C, Humidity: ${latest.humidity}%, Light: ${latest.light}, Noise: ${latest.noise}dB`
+      weatherPrediction,
+      predictionConfidence,
+      description: `${weatherPrediction} with ${(predictionConfidence * 100).toFixed(1)}% confidence. Temperature: ${latest.temperature.toFixed(1)}°C, Humidity: ${latest.humidity}%, Light: ${latest.light}, Noise: ${latest.noise}dB`
     }
   } catch (e) {
     console.error('Weather fetch error:', e)
@@ -601,7 +658,12 @@ onUnmounted(() => {
                   <span class="display-1 fw-light">{{ weatherData.temperature }}°F</span>
                   <div class="ms-3">
                     <p class="h5 mb-1">{{ weatherData.condition }}</p>
-                    <p class="text-muted mb-0">Feels like {{ weatherData.feelsLike }}°</p>
+                    <p class="text-muted mb-0">
+                      {{ weatherData.feelsLike }}
+                      <span v-if="weatherData.predictionConfidence > 0" class="ms-2">
+                        <small>({{ (weatherData.predictionConfidence * 100).toFixed(1) }}% confidence)</small>
+                      </span>
+                    </p>
                   </div>
                 </div>
               </div>
@@ -668,7 +730,27 @@ onUnmounted(() => {
                       <small class="text-muted mb-1">
                         Device <i class="bi bi-info-circle" title="Active sensor device"></i>
                       </small>
-                      <strong>{{ selectedDevice?.device_id || '102' }}</strong>
+                      <strong>{{ selectedDevice?.device_id || ' ' }}</strong>
+                    </div>
+                  </div>
+                  
+                  <!-- Weather Prediction Box -->
+                  <div class="col-md-12">
+                    <div class="card bg-info bg-opacity-10 border-info">
+                      <div class="card-body">
+                        <div class="d-flex align-items-center">
+                          <span class="fs-2 me-3">{{ weatherData.icon }}</span>
+                          <div>
+                            <small class="text-muted d-block mb-1">
+                              <i class="bi bi-cloud-sun"></i> Weather Prediction
+                            </small>
+                            <h5 class="mb-0">{{ weatherData.weatherPrediction }}</h5>
+                            <small class="text-muted">
+                              Confidence: {{ (weatherData.predictionConfidence * 100).toFixed(1) }}%
+                            </small>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -758,10 +840,13 @@ onUnmounted(() => {
               >
                 <div class="card-body p-2">
                   <div class="d-flex align-items-start">
-                    <span class="fs-5 me-2">{{ weatherData.icon }}</span>
+                    <span class="fs-5 me-2">{{ getWeatherIcon(loc.weatherPrediction) }}</span>
                     <div class="flex-grow-1">
                       <small class="d-block fw-bold">{{ loc.locationName }}</small>
                       <small class="text-primary fw-semibold">{{ loc.temp }}°F</small>
+                      <small v-if="loc.weatherPrediction !== '—'" class="d-block text-info">
+                        {{ loc.weatherPrediction }}
+                      </small>
                       <small class="d-block text-muted location-coords">
                         📍 {{ loc.latitude?.toFixed(4) }}, {{ loc.longitude?.toFixed(4) }}
                       </small>

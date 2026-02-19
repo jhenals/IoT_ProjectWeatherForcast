@@ -1,0 +1,48 @@
+{
+  "version": "1.0",
+  "features": [
+    "temperature",
+    "humidity",
+    "pressure"
+  ],
+  "units": {
+    "pressure": "kPa",
+    "temperature": "C",
+    "humidity": "%",
+    "tof": "unknown"
+  },
+  "scaler": {
+    "mean": [
+      8.873030094390911,
+      67.26142889960947,
+      101.05656786181859
+    ],
+    "std": [
+      11.679262966257266,
+      16.883722104855924,
+      0.8429581865796995
+    ]
+  },
+  "labels": [
+    "Clear",
+    "Cloudy",
+    "Drizzle",
+    "Drizzle,Fog",
+    "Drizzle,Snow,Fog",
+    "Fog",
+    "Freezing Drizzle,Snow",
+    "Freezing Rain",
+    "Haze",
+    "Mainly Clear",
+    "Mostly Cloudy",
+    "Rain",
+    "Rain Showers",
+    "Rain,Fog",
+    "Rain,Snow",
+    "Snow",
+    "Snow Showers",
+    "Snow,Blowing Snow",
+    "Snow,Fog",
+    "Thunderstorms,Rain Showers"
+  ]
+}

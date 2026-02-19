@@ -1,4 +1,4 @@
-<!-- S6000Dashboard.vue - Enhanced with Leaflet Map and Chart Axes -->
+<!-- S6000Dashboard.vue - Multi-Device Support -->
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import L from 'leaflet'
@@ -25,7 +25,10 @@ const TIME_RANGES = {
 /* -----------------------
  * State
  * --------------------- */
-const selectedDevice = ref('S6000U')
+const selectedDevice = ref('101')
+const deviceInput = ref('101')
+const deviceNotFound = ref(false)
+const availableDevices = ref([])
 const timeRange = ref('3h')
 const refreshSeconds = ref(30)
 
@@ -169,7 +172,7 @@ const initMap = () => {
     map = null
   }
   
-  // Create map centered on Quattromiglia, Calabria
+  // Create map centered on device location
   map = L.map(mapContainer.value).setView(
     [currentReadings.value.gps.latitude, currentReadings.value.gps.longitude], 
     14
@@ -188,7 +191,7 @@ const initMap = () => {
   ]).addTo(map)
   
   marker.bindPopup(`
-    <b>S6000 Sensor</b><br>
+    <b>S6000 Sensor - Device ${selectedDevice.value}</b><br>
     Lat: ${currentReadings.value.gps.latitude.toFixed(6)}<br>
     Lon: ${currentReadings.value.gps.longitude.toFixed(6)}
   `)
@@ -204,7 +207,7 @@ const updateMapMarker = () => {
   
   marker.setLatLng(newLatLng)
   marker.setPopupContent(`
-    <b>S6000 Sensor</b><br>
+    <b>S6000 Sensor - Device ${selectedDevice.value}</b><br>
     Lat: ${currentReadings.value.gps.latitude.toFixed(6)}<br>
     Lon: ${currentReadings.value.gps.longitude.toFixed(6)}
   `)
@@ -219,22 +222,53 @@ const fetchSensorData = async () => {
   loading.value = true
   error.value = ''
   hoveredPoint.value = null
+  deviceNotFound.value = false
 
   try {
     const minutes = minutesForRange(timeRange.value)
-    const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=${minutes}`)
+    // Fetch all data without device_id filter to get all available devices
+   // const url = `${API_BASE}/api/weather/forecast/?minutes=${minutes}`
+    console.log('Fetching data for all devices')
+    
+    const token = localStorage.getItem('access_token')
+    const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=${minutes}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`
+  }
+})
+    
+    console.log('Response status:', res.status)
     
     if (!res.ok) {
       throw new Error(`API Error: ${res.status} ${res.statusText}`)
     }
 
     const data = await res.json()
+    console.log('Data received:', data.length, 'total records')
 
     if (!Array.isArray(data)) {
       throw new Error('Invalid API response format')
     }
 
-    const normalizedData = data
+    // Extract unique device IDs from the data
+    const uniqueDevices = [...new Set(data.map(d => String(d.device_id ?? 'unknown')))].sort()
+    availableDevices.value = uniqueDevices
+    console.log('Available devices:', uniqueDevices)
+
+    // Filter data for selected device
+    const filteredData = data.filter(d => String(d.device_id) === String(selectedDevice.value))
+    console.log('Filtered data for device', selectedDevice.value, ':', filteredData.length, 'records')
+
+    // Check if selected device exists
+    if (filteredData.length === 0) {
+      console.log('Device not found - no data for device', selectedDevice.value)
+      deviceNotFound.value = true
+      sensorData.value = []
+      loading.value = false
+      return
+    }
+
+    const normalizedData = filteredData
       .map(d => ({
         time: new Date(d._time || d.time).getTime(),
         temperature: toNum(d.temperature),
@@ -247,20 +281,54 @@ const fetchSensorData = async () => {
         vibrAccY: toNum(d.vibrAccY),
         vibrAccZ: toNum(d.vibrAccZ),
         latitude: toNum(d.latitude),
-        longitude: toNum(d.longitude)
+        longitude: toNum(d.longitude),
+        device_id: d.device_id || selectedDevice.value
       }))
       .filter(d => Number.isFinite(d.time))
       .sort((a, b) => a.time - b.time)
 
+    console.log('Device found! Normalized data:', normalizedData.length, 'records')
     sensorData.value = normalizedData
     updateCurrentReadings(normalizedData)
+    deviceNotFound.value = false
 
   } catch (e) {
     console.error('Data fetch error:', e)
     error.value = e.message || 'Failed to load sensor data'
-    generateSimulatedData()
+    // Only generate simulated data on network/API errors, not for device not found
+    if (!deviceNotFound.value) {
+      console.log('Generating simulated data due to error')
+      generateSimulatedData()
+    }
   } finally {
     loading.value = false
+  }
+}
+
+const searchDevice = async () => {
+  const trimmedInput = deviceInput.value.trim()
+  
+  if (!trimmedInput) {
+    console.log('Empty device input')
+    return
+  }
+  
+  console.log('Searching for device:', trimmedInput)
+  selectedDevice.value = trimmedInput
+  
+  await fetchSensorData()
+  
+  console.log('After fetch - deviceNotFound:', deviceNotFound.value)
+  
+  // Reinitialize or update map if device was found
+  if (!deviceNotFound.value && sensorData.value.length > 0) {
+    setTimeout(() => {
+      if (map && marker) {
+        updateMapMarker()
+      } else {
+        initMap()
+      }
+    }, 300)
   }
 }
 
@@ -294,19 +362,36 @@ const generateSimulatedData = () => {
   const minutes = minutesForRange(timeRange.value)
   const points = Math.min(minutes, 180)
   
+  // Generate different baseline values for different devices
+  const deviceOffset = parseInt(selectedDevice.value) - 101
+  const tempBase = 22 + deviceOffset * 0.5
+  const humBase = 47 + deviceOffset * 2
+  const noiseBase = 50 + deviceOffset * 3
+  
+  // Different GPS coordinates for each device
+  const gpsOffsets = [
+    { lat: 0, lng: 0 },
+    { lat: 0.002, lng: 0.003 },
+    { lat: -0.001, lng: 0.002 },
+    { lat: 0.003, lng: -0.001 },
+    { lat: -0.002, lng: -0.002 }
+  ]
+  const gpsOffset = gpsOffsets[deviceOffset] || gpsOffsets[0]
+  
   sensorData.value = Array.from({ length: points }, (_, i) => ({
     time: now - (points - i) * 60000,
-    temperature: 22 + Math.random() * 3 + Math.sin(i / 20) * 2,
-    humidity: 47 + Math.random() * 5 + Math.cos(i / 15) * 3,
+    temperature: tempBase + Math.random() * 3 + Math.sin(i / 20) * 2,
+    humidity: humBase + Math.random() * 5 + Math.cos(i / 15) * 3,
     pressure: 1010 + Math.random() * 10,
-    noise: 50 + Math.random() * 12,
+    noise: noiseBase + Math.random() * 12,
     tof: 30 + Math.random() * 100,
     angle: -15 + Math.random() * 30,
     vibrAccX: Math.random() * 2 - 1,
     vibrAccY: Math.random() * 2 - 1,
     vibrAccZ: Math.random() * 2 - 1,
-    latitude: 39.0742 + (Math.random() - 0.5) * 0.01,
-    longitude: 16.3027 + (Math.random() - 0.5) * 0.01
+    latitude: 39.0742 + gpsOffset.lat + (Math.random() - 0.5) * 0.001,
+    longitude: 16.3027 + gpsOffset.lng + (Math.random() - 0.5) * 0.001,
+    device_id: selectedDevice.value
   }))
 
   updateCurrentReadings(sensorData.value)
@@ -491,7 +576,7 @@ const handleMouseOut = () => {
  * Watchers & Lifecycle
  * -----------------------*/
 watch(refreshSeconds, startRefreshTimer)
-watch([selectedDevice, timeRange], fetchSensorData)
+watch(timeRange, fetchSensorData)
 
 onMounted(() => {
   fetchSensorData()
@@ -521,6 +606,9 @@ onBeforeUnmount(() => {
         <p class="header-subtitle">Real-time IoT sensor monitoring with InfluxDB integration</p>
       </div>
       <div class="header-right">
+        <span class="header-pill device-pill">
+          <i class="bi bi-hdd-rack"></i> Device {{ selectedDevice }}
+        </span>
         <span class="header-pill">
           <i class="bi bi-clock"></i> {{ timeRange }}
         </span>
@@ -540,15 +628,29 @@ onBeforeUnmount(() => {
       <div class="controls-grid">
         <div>
           <label class="label">
-            <i class="bi bi-hdd-rack"></i> Device
+            <i class="bi bi-hdd-rack"></i> Device ID
           </label>
-          <input
-            v-model="selectedDevice"
-            type="text"
-            class="input"
-            placeholder="S6000U"
-            readonly
-          />
+          <div class="device-search">
+            <input
+              v-model="deviceInput"
+              type="text"
+              class="input"
+              placeholder="Enter device ID (e.g., 101)"
+              @keyup.enter="searchDevice"
+            />
+            <button 
+              class="btn btn-search" 
+              @click="searchDevice"
+              :disabled="loading || !deviceInput.trim()"
+            >
+              <i class="bi bi-search"></i>
+              Search
+            </button>
+          </div>
+          <div class="help">
+            <strong>Available devices:</strong>
+            {{ availableDevices.length ? availableDevices.join(', ') : (loading ? 'Loading…' : '—') }}
+          </div>
         </div>
 
         <div>
@@ -587,14 +689,31 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div v-if="error" class="error">
+      <div v-if="error && !deviceNotFound" class="error">
         <i class="bi bi-exclamation-triangle"></i>
-        <span>{{ error }} (using simulated data)</span>
+        <span>{{ error }} (using simulated data for Device {{ selectedDevice }})</span>
+      </div>
+
+      <div v-if="deviceNotFound" class="device-not-found">
+        <i class="bi bi-x-circle"></i>
+        <div>
+          <h3>No Device Found</h3>
+          <p>Device ID <strong>{{ selectedDevice }}</strong> was not found in the database.</p>
+          <p>Please check the device ID and try again.</p>
+        </div>
+      </div>
+
+      <!-- Debug info - remove in production -->
+      <div v-if="false" style="margin-top: 10px; padding: 10px; background: #333; border-radius: 4px; font-size: 11px;">
+        <div>deviceNotFound: {{ deviceNotFound }}</div>
+        <div>selectedDevice: {{ selectedDevice }}</div>
+        <div>sensorData.length: {{ sensorData.length }}</div>
+        <div>loading: {{ loading }}</div>
       </div>
     </section>
 
     <!-- Main Grid -->
-    <div class="main-grid">
+    <div v-if="!deviceNotFound" class="main-grid">
       <!-- Thermometer -->
       <section class="panel thermometer-panel">
         <h3 class="chart-title">
@@ -712,8 +831,8 @@ onBeforeUnmount(() => {
               :points="temperatureLinePoints"
               fill="none"
               stroke="#ff9b3d"
-              stroke-width="2"
-              style="filter: drop-shadow(0 0 3px rgba(255, 155, 61, 0.5))"
+              stroke-width="0.5"
+              style="filter: drop-shadow(0 0 0.5px rgba(255, 155, 61, 0.5))"
             />
 
             <!-- Humidity Line -->
@@ -722,8 +841,8 @@ onBeforeUnmount(() => {
               :points="humidityLinePoints"
               fill="none"
               stroke="#3d9fff"
-              stroke-width="2"
-              style="filter: drop-shadow(0 0 3px rgba(61, 159, 255, 0.5))"
+              stroke-width="0.5"
+              style="filter: drop-shadow(0 0 0.5px rgba(61, 159, 255, 0.5))"
             />
 
             <!-- Temperature Points -->
@@ -810,7 +929,7 @@ onBeforeUnmount(() => {
       </section>
 
       <!-- Humidity Gauge -->
-      <section class="panel gauge-panel">
+      <section class="panel gauge-panel-humidity">
         <h3 class="chart-title">
           <i class="bi bi-droplet-half"></i> Humidity
         </h3>
@@ -846,7 +965,7 @@ onBeforeUnmount(() => {
         <h3 class="chart-title">
           <i class="bi bi-soundwave"></i> Sound Level
         </h3>
-        <div class="chart-wrap">
+        <div class="chart-wrap-noise">
           <svg :viewBox="`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`">
             <!-- Grid Lines -->
             <g style="opacity: 0.08">
@@ -1063,7 +1182,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Statistics Footer -->
-    <footer class="stats-grid">
+    <footer v-if="!deviceNotFound" class="stats-grid">
       <div class="stat stat-temp">
         <div class="stat-label">
           <i class="bi bi-thermometer-half"></i> Temperature
@@ -1181,6 +1300,12 @@ onBeforeUnmount(() => {
   transition: all 0.3s ease;
 }
 
+.device-pill {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(96, 165, 250, 0.1);
+}
+
 .pill-active {
   border-color: var(--accent-2);
   color: var(--accent-2);
@@ -1204,6 +1329,104 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 15px;
+}
+
+.device-search {
+  display: flex;
+  gap: 8px;
+}
+
+.device-search .input {
+  flex: 1;
+}
+
+.help {
+  margin-top: 8px;
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.help strong {
+  color: #cbd5e0;
+  font-weight: 700;
+}
+
+.btn-search {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  padding: 8px 16px;
+  white-space: nowrap;
+}
+
+.btn-search:hover:not(:disabled) {
+  background: #4a8fd8;
+  box-shadow: 0 0 14px rgba(96, 165, 250, 0.4);
+}
+
+.device-not-found {
+  margin-top: 12px;
+  padding: 24px;
+  background: rgba(127, 29, 29, 0.3);
+  border: 2px solid #dc2626;
+  border-radius: 8px;
+  color: #fecaca;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  font-size: 14px;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.device-not-found i {
+  font-size: 40px;
+  color: #ef4444;
+  flex-shrink: 0;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.device-not-found h3 {
+  margin: 0 0 12px 0;
+  color: #fca5a5;
+  font-size: 20px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.device-not-found p {
+  margin: 6px 0;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.device-not-found strong {
+  color: white;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
 }
 
 .label {
@@ -1307,10 +1530,18 @@ onBeforeUnmount(() => {
 }
 
 .gauge-panel {
+  grid-column: span 8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.gauge-panel-humidity {
   grid-column: span 4;
   display: flex;
   flex-direction: column;
   align-items: center;
+  
 }
 
 .chart-panel-wide {
@@ -1410,16 +1641,24 @@ onBeforeUnmount(() => {
 
 /* Charts */
 .chart-wrap {
-  height: 220px;
+  height: 360px;
   background: var(--panel-2);
   border: 1px solid var(--panel-border);
   border-radius: 6px;
   overflow: hidden;
   position: relative;
 }
+.chart-wrap-noise {
+  height: 460px;
+  background: var(--panel-2);
+  border: 0.5px solid var(--panel-border);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
 
 .chart-point {
-  opacity: 0.7;
+  opacity: 0.5;
   cursor: pointer;
   transition: opacity 0.2s ease;
 }

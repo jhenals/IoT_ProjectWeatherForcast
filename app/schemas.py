@@ -18,6 +18,7 @@ class WeatherPoint(BaseModel):
     vibrAccX: Optional[float] = None
     vibrAccY: Optional[float] = None
     vibrAccZ: Optional[float] = None
-    forcast: Optional[str] = None
+    weather_prediction: Optional[str] = None
+    prediction_confidence: Optional[float] = None
     latitude:Optional[float]=None
     longitude:Optional[float]=None
