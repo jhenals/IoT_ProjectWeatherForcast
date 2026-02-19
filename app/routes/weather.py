@@ -8,7 +8,7 @@ from app.auth import get_current_user
 router = APIRouter(prefix="")
 @router.get("/forecast/", response_model=List[WeatherPoint])
 def get_weather_forecast(
-    #device_id: str,
+    # device_id: str,
     minutes: int = Query(60, ge=1, le=7*24*60),
     current_user: str = Depends(get_current_user),  
     measurement: str = Query(meas),):
