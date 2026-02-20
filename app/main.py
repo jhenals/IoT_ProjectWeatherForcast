@@ -5,33 +5,26 @@ from contextlib import asynccontextmanager
 from app.routes.weather import router as weather_router
 from app.routes.rag import router as rag_router
 from app.routes.auth import router as auth_router
-from app.database import create_db, init_firebase
+from app.database import init_firebase
 import os
+from google import genai
 from app.config import GROQ_API_KEY
-
-try:
-    import google.generativeai as genai
-except ModuleNotFoundError:
-    genai = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Initialize Firebase and other services
     init_firebase()
-    if GROQ_API_KEY and genai is not None:
-        genai.configure(api_key=GROQ_API_KEY)
+    if GROQ_API_KEY:
+        genai.Client(api_key=GROQ_API_KEY)
     yield
     # Shutdown: Clean up resources
 
-# 2. Use ORJSONResponse for faster JSON serialization
+# For faster JSON serialization
 app = FastAPI(docs_url="/", redoc_url=None,
               title="IoT Weather API", version="1.0.0")
 
-# 3. Secure CORS: Dynamic origins from environment variables
-# Avoid "*" in production; explicitly list trusted domains
 ALLOWED_ORIGINS = os.getenv(
-    "ALLOWED_ORIGINS", "http://localhost:5174,http://127.0.0.1:5174,http://localhost:5173,http://127.0.0.1:5173,http://192.168.0.1:8086,http://127.0.0.1:5500").split(",")
+    "ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://192.168.0.1:8000").split(",")
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,12 +35,9 @@ app.add_middleware(
 
 )
 
-# 4. Structured Routing
 app.include_router(weather_router, prefix="/api/weather", tags=["weather"])
 app.include_router(rag_router, prefix="/api/rag", tags=["AI Assistant"])
 app.include_router(auth_router)
-
-# 5. Lightweight Health Check
 
 
 @app.get("/health", include_in_schema=False)
