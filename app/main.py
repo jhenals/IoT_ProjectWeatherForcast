@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from app.routes.weather import router as weather_router
 from app.routes.rag import router as rag_router
 from app.routes.auth import router as auth_router
-from app.database import create_db
+from app.database import create_db, init_firebase
 import os
 from app.config import GROQ_API_KEY
 
@@ -17,8 +17,8 @@ except ModuleNotFoundError:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    create_db()
-    # Startup: Initialize Gemini client or DB connections here
+    # Startup: Initialize Firebase and other services
+    init_firebase()
     if GROQ_API_KEY and genai is not None:
         genai.configure(api_key=GROQ_API_KEY)
     yield

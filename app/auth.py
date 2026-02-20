@@ -3,6 +3,8 @@ from jose import jwt, JWTError
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from firebase_admin import auth as firebase_auth
+from app.database import get_firestore_db
 
 # Use a secure random key in production
 SECRET_KEY = "12345667890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234"
@@ -51,3 +53,58 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
         return username
     except JWTError:
         raise credentials_exception
+
+
+def verify_firebase_token(token: str = Depends(oauth2_scheme)) -> dict:
+    """
+    Verify Firebase ID token and return user data.
+    Raises 401 if token is invalid or expired.
+    """
+    try:
+        decoded_token = firebase_auth.verify_id_token(token)
+        return decoded_token
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired Firebase token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+def get_admin_user(token: dict = Depends(verify_firebase_token)) -> dict:
+    """
+    Verify that the current user is an admin in Firestore.
+    Raises 403 if user is not an admin.
+    """
+    uid = token.get("uid")
+    if not uid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token - no UID found",
+        )
+
+    try:
+        db = get_firestore_db()
+        user_doc = db.collection("users").document(uid).get()
+
+        if not user_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found in database",
+            )
+
+        user_data = user_doc.to_dict()
+        if user_data.get("role") != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin access required to access this endpoint",
+            )
+
+        return user_data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Authentication error: {str(e)}",
+        )

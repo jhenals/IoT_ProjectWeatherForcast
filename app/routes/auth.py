@@ -1,74 +1,67 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
-from sqlmodel import Session, select
-from pydantic import BaseModel, Field
-from app.database import get_session
-from app.models import User
-from app.auth import hash_password, verify_password, create_access_token
+from fastapi import APIRouter, HTTPException, status
+from firebase_admin import auth as firebase_auth
+from app.models import UserLoginRequest
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-# Request model for registration - receives JSON body
-class RegisterRequest(BaseModel):
-    username: str = Field(..., min_length=3, description="Username (minimum 3 characters)")
-    password: str = Field(..., min_length=6, description="Password (minimum 6 characters)")
-
-# Response models
-class MessageResponse(BaseModel):
-    message: str
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str
 
-@router.post("/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
-def register(req: RegisterRequest, db: Session = Depends(get_session)):
-    """
-    Register a new user account.
-    
-    - **username**: Unique username (min 3 characters)
-    - **password**: Password (min 6 characters) - will be hashed before storage
-    """
-    # Check if username already exists
-    existing_user = db.exec(select(User).where(User.username == req.username)).first()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already exists"
-        )
-    
-    # Create new user with hashed password
-    new_user = User(
-        username=req.username,
-        hashed_password=hash_password(req.password)
-    )
-    db.add(new_user)
-    db.commit()
-    
-    return {"message": "User created successfully"}
 
 @router.post("/login", response_model=TokenResponse)
-def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_session)):
+def login(req: UserLoginRequest):
     """
-    Login with username and password.
-    
-    Returns a JWT access token for authenticated requests.
+    Login with email and password.
+
+    Returns a Firebase ID token for authenticated requests.
     """
-    # Find user
-    user = db.exec(select(User).where(User.username == form.username)).first()
-    
-    # Verify credentials
-    if not user or not verify_password(form.password, user.hashed_password):
+    try:
+        # Get user by email to retrieve UID
+        user = firebase_auth.get_user_by_email(req.email)
+
+        # Verify password using Firebase REST API
+        # (Firebase Admin SDK doesn't have built-in password verification)
+        import requests
+        import os
+
+        api_key = "AIzaSyAvlmocEGgpWviAtHTcPaoxQWh5PZ6QDbI"
+
+        response = requests.post(
+            f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={api_key}",
+            json={
+                "email": req.email,
+                "password": req.password,
+                "returnSecureToken": True
+            }
+        )
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+
+        data = response.json()
+        access_token = data.get("idToken")
+
+        return {
+            "access_token": access_token,
+            "token_type": "bearer"
+        }
+
+    except firebase_auth.UserNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="Email not registered. Please sign up first.",
+            headers={"WWW-Authenticate": "Bearer"}
         )
-    
-    # Generate JWT token
-    access_token = create_access_token({"sub": user.username})
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Login failed: {str(e)}",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
