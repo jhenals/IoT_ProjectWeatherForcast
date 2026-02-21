@@ -1,6 +1,7 @@
 <!-- Updated App.vue - Direct Dashboard Access -->
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { initializeAuth, requireAuth, getUserSession, logout as authLogout } from './utils/auth-handler'
 
 // Pages
 import SensorDashboardPage from './pages/SensorDashboardPage.vue'
@@ -18,16 +19,31 @@ import Sidebar from './components/layout/SidebarNav.vue'
 
 // ── Navigation state ──────────────────────────────────────────────
 const currentPage = ref('dashboard')
+const userEmail = ref('')
+
+// ── Authentication initialization ─────────────────────────────────
+onMounted(async () => {
+  // Initialize auth - checks session cookie
+  const authStatus = await initializeAuth()
+
+  if (!authStatus) {
+    // Not authenticated - redirect to login
+    requireAuth()
+  } else {
+    // Get user info
+    const session = getUserSession()
+    userEmail.value = session?.email || 'User'
+    console.log('✅ Dashboard loaded for:', userEmail.value)
+  }
+})
 
 function navigateTo(page) {
   currentPage.value = page
 }
 
 function logout() {
-  localStorage.removeItem('access_token')
-  localStorage.removeItem('username')
-  // Redirect to web-app landing page
-  window.location.href = 'http://127.0.0.1:5500/web-app/index.html'
+  // Use the auth-handler logout (clears all tokens and redirects)
+  authLogout()
 }
 </script>
 

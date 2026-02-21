@@ -21,7 +21,7 @@ FIREBASE_CLIENT_EMAIL = os.getenv(
     "FIREBASE_CLIENT_EMAIL", "firebase-adminsdk@smart-park-iot-d7743.iam.gserviceaccount.com")
 FIREBASE_CLIENT_ID = os.getenv("FIREBASE_CLIENT_ID", "")
 FIREBASE_CERT_URL = os.getenv("FIREBASE_CERT_URL", "")
-FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "")
+FIREBASE_CREDENTIALS_PATH = os.getenv("FIREBASE_CREDENTIALS_PATH", "")
 
 
 def validate_config() -> None:
@@ -31,13 +31,16 @@ def validate_config() -> None:
         "INFLUXDB_ORG": INFLUXDB_ORG,
         "INFLUXDB_BUCKET": INFLUXDB_BUCKET,
         "INFLUXDB_MEASUREMENT": INFLUXDB_MEASUREMENT,
+
         "GROQ_API_KEY": GROQ_API_KEY,
+
         "FIREBASE_PROJECT_ID": FIREBASE_PROJECT_ID,
         "FIREBASE_PRIVATE_KEY_ID": FIREBASE_PRIVATE_KEY_ID,
         "FIREBASE_PRIVATE_KEY": FIREBASE_PRIVATE_KEY,
         "FIREBASE_CLIENT_EMAIL": FIREBASE_CLIENT_EMAIL,
         "FIREBASE_CLIENT_ID": FIREBASE_CLIENT_ID,
         "FIREBASE_CERT_URL": FIREBASE_CERT_URL,
+        "FIREBASE_CREDENTIALS_PATH": FIREBASE_CREDENTIALS_PATH,
     }.items() if not v]
     if missing:
         raise RuntimeError(

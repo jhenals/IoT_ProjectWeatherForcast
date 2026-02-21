@@ -135,7 +135,9 @@ async function fetchDeviceContext() {
   try {
     console.log('Fetching sensor data from:', `${API_BASE}/api/weather/forecast/?minutes=60`);
     
-    const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=60`);
+    const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=60`, {
+      credentials: "include",
+    });
     if (!res.ok) {
       throw new Error(`Sensor API failed (${res.status})`);
     }
@@ -233,6 +235,7 @@ async function callRag({ text, audioFileOrBlob }) {
   const res = await fetch(`${API_BASE}/api/rag/chat`, {
     method: "POST",
     body: formData,
+    credentials: "include",
     // ✅ Do NOT set Content-Type - let browser handle multipart boundaries
   });
 

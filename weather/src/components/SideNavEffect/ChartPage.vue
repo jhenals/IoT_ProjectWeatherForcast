@@ -125,19 +125,13 @@ async function loadChartData() {
     const url = new URL(`${API_BASE}/api/weather/forecast/`)
     url.searchParams.set('minutes', String(minutes))
 
-    const token = localStorage.getItem('access_token')
-    
     const res = await fetch(url.toString(), {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+      credentials: 'include'
     })
     
     if (!res.ok) {
       if (res.status === 401) {
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('username')
-        window.location.reload()
+        window.location.href = 'http://localhost:5500/web-app/src/login.html'
         return
       }
       throw new Error(`${res.status} ${res.statusText}`)

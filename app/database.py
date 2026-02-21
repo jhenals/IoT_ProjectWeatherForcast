@@ -1,12 +1,16 @@
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def init_firebase():
-    cred_dict = {'C:/Users/subol/Desktop/LM Telecom Engineering/IOT/projects/smart-park-iot/important/smart-park-iot-d7743-firebase-adminsdk-fbsvc-2938d538d4.json'}
-    cred = credentials.Certificate(cred_dict)
+    cred_path = os.getenv('FIREBASE_CREDENTIALS_PATH')
+    cred = credentials.Certificate(cred_path)
     firebase_admin.initialize_app(cred)
+
 
 
 def get_firebase_auth():

@@ -24,7 +24,11 @@ app = FastAPI(docs_url="/", redoc_url=None,
               title="IoT Weather API", version="1.0.0")
 
 ALLOWED_ORIGINS = os.getenv(
-    "ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://192.168.0.1:8000").split(",")
+    "ALLOWED_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173,"
+    "http://localhost:5500,http://127.0.0.1:5500,"
+    "http://localhost:8000,http://127.0.0.1:8000"
+).split(",")
 
 app.add_middleware(
     CORSMiddleware,

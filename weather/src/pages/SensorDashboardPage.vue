@@ -25,11 +25,8 @@ async function loadLatest() {
     loading.value = true
 
    // const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=60`)
-    const token = localStorage.getItem('access_token')
     const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=60`, {
-  headers: {
-    'Authorization': `Bearer ${token}`
-  }
+  credentials: 'include'
 })
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
     const data = await res.json()
@@ -102,11 +99,8 @@ async function loadDeviceDetails(deviceId) {
     
     // Fetch device history for the last 1 hour for this specific device only
     //const res = await fetch(`${API_BASE}/api/weather/forecast/?device_id=${deviceId}&minutes=60`)
-    const token = localStorage.getItem('access_token')
     const res = await fetch(`${API_BASE}/api/weather/forecast/?device_id=${deviceId}&minutes=60`, {
-    headers: {
-      'Authorization': `Bearer ${token}`
-  }
+    credentials: 'include'
 })
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
     const data = await res.json()

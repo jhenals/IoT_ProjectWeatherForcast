@@ -230,11 +230,8 @@ const fetchSensorData = async () => {
    // const url = `${API_BASE}/api/weather/forecast/?minutes=${minutes}`
     console.log('Fetching data for all devices')
     
-    const token = localStorage.getItem('access_token')
     const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=${minutes}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`
-  }
+    credentials: 'include'
 })
     
     console.log('Response status:', res.status)

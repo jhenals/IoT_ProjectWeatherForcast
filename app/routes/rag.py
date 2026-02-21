@@ -5,7 +5,7 @@ import os
 import json
 import traceback
 from typing import Dict, Any
-from app.routes.auth import get_firebase_admin_user
+from app.routes.auth import get_admin_session_user
 
 router = APIRouter()
 
@@ -292,7 +292,7 @@ def _build_weather_context(weather_prediction: str, prediction_confidence: float
     return weather_text
 
 
-@router.post("/chat", dependencies=[Security(get_firebase_admin_user)])
+@router.post("/chat", dependencies=[Security(get_admin_session_user)])
 async def process_rag_request(
     user_query: str = Form(None),
     device_data: str = Form(None),
