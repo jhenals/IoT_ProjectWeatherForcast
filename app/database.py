@@ -7,10 +7,12 @@ load_dotenv()
 
 
 def init_firebase():
-    cred_path = os.getenv('FIREBASE_CREDENTIALS_PATH')
+    if len(firebase_admin._apps) > 0:
+        print("(DATABASE) Firebase Admin SDK already initialized.")
+        return
+    cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
     cred = credentials.Certificate(cred_path)
     firebase_admin.initialize_app(cred)
-
 
 
 def get_firebase_auth():

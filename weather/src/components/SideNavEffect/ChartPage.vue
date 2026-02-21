@@ -1,6 +1,7 @@
 <!-- ChartPage.vue - Enhanced Interactive Grafana-like Dashboard with Axes -->
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import api from '../../utils/api.js'
 
 /* -----------------------
  * State
@@ -24,8 +25,6 @@ const selectedPoints = ref([])
 const showStats = ref(true)
 const showGrid = ref(true)
 const fullscreenChart = ref(null) // null, 'temp', 'hum', 'pres', 'noise'
-
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
 /* -----------------------
  * Chart constants
@@ -122,22 +121,7 @@ async function loadChartData() {
 
   try {
     const minutes = minutesForRange(timeRange.value)
-    const url = new URL(`${API_BASE}/api/weather/forecast/`)
-    url.searchParams.set('minutes', String(minutes))
-
-    const res = await fetch(url.toString(), {
-      credentials: 'include'
-    })
-    
-    if (!res.ok) {
-      if (res.status === 401) {
-        window.location.href = 'http://localhost:5500/web-app/src/login.html'
-        return
-      }
-      throw new Error(`${res.status} ${res.statusText}`)
-    }
-
-    const data = await res.json()
+    const data = await api.get(`/api/weather/forecast/?minutes=${minutes}`)
 
     if (!Array.isArray(data)) throw new Error('Unexpected API response')
 

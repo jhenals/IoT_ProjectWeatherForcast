@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import datetime, timedelta
 
 import requests
@@ -7,7 +8,7 @@ from fastapi.security import HTTPBearer, OAuth2PasswordBearer, OAuth2PasswordReq
 from firebase_admin import auth as firebase_auth
 from pydantic import BaseModel
 
-from app.database import get_firestore_db
+from app.database import get_firestore_db, init_firebase
 from app.models import UserLoginRequest, UserRegisterRequest
 
 
@@ -35,8 +36,6 @@ class TokenResponse(BaseModel):
     token_type: str
     user_role: str
 
-# Response models
-
 
 class MessageResponse(BaseModel):
     message: str
@@ -59,6 +58,7 @@ class SessionStatusResponse(BaseModel):
 
 
 def _get_admin_user(uid: str) -> dict:
+    print(f"Fetching user data for UID: {uid}")
     user_doc = get_db().collection("users").document(uid).get()
 
     if not user_doc.exists():
@@ -92,6 +92,7 @@ def get_firebase_admin_user(token: str = Depends(oauth2_scheme)) -> dict:
     Used as a dependency for all admin-protected endpoints.
     """
     try:
+        init_firebase()
         # Verify Firebase ID token
         decoded_token = firebase_auth.verify_id_token(token)
         uid = decoded_token.get("uid")
@@ -109,11 +110,11 @@ def get_firebase_admin_user(token: str = Depends(oauth2_scheme)) -> dict:
 
 
 def get_admin_session_user(request: Request) -> dict:
-    """Verify user from Authorization Bearer token or session cookie."""
-    # Try token-based auth first
+    """Verify user from Authorization Bearer token."""
+    init_firebase()
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
-        token = auth_header[7:]  # Remove 'Bearer ' prefix
+        token = auth_header[7:]
         try:
             decoded_token = firebase_auth.verify_id_token(token)
             uid = decoded_token.get("uid")
@@ -125,25 +126,9 @@ def get_admin_session_user(request: Request) -> dict:
                 headers={"WWW-Authenticate": "Bearer"},
             ) from e
 
-    # Fallback to session cookie (legacy support)
-    session_cookie = request.cookies.get(SESSION_COOKIE_NAME)
-    if session_cookie:
-        try:
-            decoded_token = firebase_auth.verify_session_cookie(
-                session_cookie, check_revoked=True
-            )
-            uid = decoded_token.get("uid")
-            return _get_admin_user(uid)
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired session",
-                headers={"WWW-Authenticate": "Bearer"},
-            ) from e
-
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Missing authorization",
+        detail="Missing authorization header",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
@@ -236,44 +221,15 @@ def login_firebase(req: UserLoginRequest):
     return _authenticate_firebase_user(req.email, req.password)
 
 
-@router.post("/session-login", response_model=MessageResponse)
-def session_login(req: SessionLoginRequest, response: Response):
-    """
-    Deprecated: Session login is no longer needed.
-    Token-based authentication is used instead.
-    This endpoint returns success for backward compatibility.
-    """
-    return MessageResponse(message="Using token-based authentication")
-
-
 @router.get("/session-status", response_model=SessionStatusResponse)
 def session_status(request: Request):
-    """Check current session cookie and return admin user info."""
+    """Get current user info from Bearer token."""
     admin_user = get_admin_session_user(request)
     return SessionStatusResponse(
         uid=admin_user["uid"],
         email=admin_user.get("email", ""),
         role=admin_user["role"],
     )
-
-
-@router.post("/session-logout", response_model=MessageResponse)
-def session_logout(request: Request, response: Response):
-    """Clear the session cookie and revoke Firebase refresh tokens."""
-    session_cookie = request.cookies.get(SESSION_COOKIE_NAME)
-
-    if session_cookie:
-        try:
-            decoded = firebase_auth.verify_session_cookie(
-                session_cookie, check_revoked=True
-            )
-            uid = decoded.get("uid")
-            firebase_auth.revoke_refresh_tokens(uid)
-        except Exception:
-            pass
-
-    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
-    return MessageResponse(message="Session cleared")
 
 
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)

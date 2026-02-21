@@ -1,6 +1,7 @@
 // SensorDashboardPage.vue - Updated with Detail Modal and Weather Prediction
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import api from '../utils/api.js'
 import AppShell from '../components/layout/AppShell.vue'
 import SensorPanel from '../components/sensors/SensorPanel.vue'
 import RagChatbot from '../components/RagChatbot.vue'
@@ -16,7 +17,6 @@ const selectedDevice = ref(null)
 const detailLoading = ref(false)
 const deviceHistory = ref([])
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 let timer = null
 
 async function loadLatest() {
@@ -24,12 +24,7 @@ async function loadLatest() {
     error.value = ''
     loading.value = true
 
-   // const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=60`)
-    const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=60`, {
-  credentials: 'include'
-})
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-    const data = await res.json()
+    const data = await api.get(`/api/weather/forecast/?minutes=60`)
 
     if (!Array.isArray(data) || data.length === 0) {
       devices.value = []
@@ -98,12 +93,7 @@ async function loadDeviceDetails(deviceId) {
     detailLoading.value = true
     
     // Fetch device history for the last 1 hour for this specific device only
-    //const res = await fetch(`${API_BASE}/api/weather/forecast/?device_id=${deviceId}&minutes=60`)
-    const res = await fetch(`${API_BASE}/api/weather/forecast/?device_id=${deviceId}&minutes=60`, {
-    credentials: 'include'
-})
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-    const data = await res.json()
+    const data = await api.get(`/api/weather/forecast/?device_id=${deviceId}&minutes=60`)
     
     // Filter to ensure we only have data for this specific device
     const filteredData = data.filter(reading => reading.device_id === deviceId)

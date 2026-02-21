@@ -14,11 +14,11 @@ INFLUXDB_MEASUREMENT = os.getenv("INFLUXDB_MEASUREMENT", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 # Firebase Configuration
-FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "smart-park-iot-d7743")
+FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "iot-project-49099")
 FIREBASE_PRIVATE_KEY_ID = os.getenv("FIREBASE_PRIVATE_KEY_ID", "")
 FIREBASE_PRIVATE_KEY = os.getenv("FIREBASE_PRIVATE_KEY", "")
 FIREBASE_CLIENT_EMAIL = os.getenv(
-    "FIREBASE_CLIENT_EMAIL", "firebase-adminsdk@smart-park-iot-d7743.iam.gserviceaccount.com")
+    "FIREBASE_CLIENT_EMAIL", "firebase-adminsdk@iot-project-49099.iam.gserviceaccount.com")
 FIREBASE_CLIENT_ID = os.getenv("FIREBASE_CLIENT_ID", "")
 FIREBASE_CERT_URL = os.getenv("FIREBASE_CERT_URL", "")
 FIREBASE_CREDENTIALS_PATH = os.getenv("FIREBASE_CREDENTIALS_PATH", "")

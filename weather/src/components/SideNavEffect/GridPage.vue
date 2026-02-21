@@ -1,13 +1,13 @@
 <!-- S6000Dashboard.vue - Multi-Device Support -->
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import api from '../../utils/api.js'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
 /* -----------------------
  * Constants
  * --------------------- */
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 const SVG_WIDTH = 720
 const SVG_HEIGHT = 220
 const PADDING = { left: 60, right: 30, top: 20, bottom: 50 }
@@ -230,17 +230,8 @@ const fetchSensorData = async () => {
    // const url = `${API_BASE}/api/weather/forecast/?minutes=${minutes}`
     console.log('Fetching data for all devices')
     
-    const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=${minutes}`, {
-    credentials: 'include'
-})
-    
-    console.log('Response status:', res.status)
-    
-    if (!res.ok) {
-      throw new Error(`API Error: ${res.status} ${res.statusText}`)
-    }
-
-    const data = await res.json()
+    const data = await api.get(`/api/weather/forecast/?minutes=${minutes}`)
+    console.log('Response status: OK')
     console.log('Data received:', data.length, 'total records')
 
     if (!Array.isArray(data)) {

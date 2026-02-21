@@ -1,19 +1,13 @@
-/**
- * API Helper for Authenticated Requests
- *
- * This file provides utilities to make authenticated API calls from localhost:5173
- * to the FastAPI backend at localhost:8000 using Firebase ID token.
- *
- * The token is stored in localStorage after login and sent on every
- * request to localhost:8000 as an Authorization Bearer token.
- */
-
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 /**
  * Get the Firebase ID token from localStorage
  */
 function getAuthToken() {
+  const directToken = localStorage.getItem("accessToken");
+  if (directToken) {
+    return directToken;
+  }
   const session = localStorage.getItem("userSession");
   if (session) {
     const parsed = JSON.parse(session);
@@ -31,12 +25,19 @@ export function getUserSession() {
 }
 
 /**
- * Check session status from backend (cookie-based)
+ * Check session status from backend (Bearer token)
  */
 export async function fetchSessionStatus() {
+  const token = getAuthToken();
+  if (!token) {
+    return null;
+  }
+
   const res = await fetch(`${API_BASE_URL}/api/auth/session-status`, {
     method: "GET",
-    credentials: "include",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
   });
 
   if (!res.ok) {
@@ -87,7 +88,6 @@ export async function apiRequest(endpoint, options = {}) {
   const config = {
     ...options,
     headers,
-    credentials: "include",
   };
 
   // Convert body to JSON if it's an object
@@ -101,7 +101,9 @@ export async function apiRequest(endpoint, options = {}) {
     // Handle 401 Unauthorized (token expired or invalid)
     if (response.status === 401) {
       console.error("Authentication failed - session expired or invalid");
-      localStorage.clear();
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("userSession");
+      localStorage.removeItem("sessionSavedAt");
       window.location.href = "http://localhost:5500/web-app/src/login.html";
       throw new Error("Session expired. Please login again.");
     }

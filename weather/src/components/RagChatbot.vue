@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, nextTick, onBeforeUnmount } from "vue";
+import api from "../utils/api.js";
 
 const isOpen = ref(false);
 const messages = ref([]);
@@ -134,15 +135,7 @@ async function fetchDeviceContext() {
 
   try {
     console.log('Fetching sensor data from:', `${API_BASE}/api/weather/forecast/?minutes=60`);
-    
-    const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=60`, {
-      credentials: "include",
-    });
-    if (!res.ok) {
-      throw new Error(`Sensor API failed (${res.status})`);
-    }
-    
-    const data = await res.json();
+    const data = await api.get(`/api/weather/forecast/?minutes=60`);
     console.log('Sensor data received:', data);
 
     deviceContext.value = data;
@@ -232,10 +225,11 @@ async function callRag({ text, audioFileOrBlob }) {
   // Send request to Groq-powered backend
   console.log('Sending to:', `${API_BASE}/api/rag/chat`);
   
+  const token = localStorage.getItem("accessToken");
   const res = await fetch(`${API_BASE}/api/rag/chat`, {
     method: "POST",
     body: formData,
-    credentials: "include",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     // ✅ Do NOT set Content-Type - let browser handle multipart boundaries
   });
 

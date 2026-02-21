@@ -1,6 +1,7 @@
 <!-- WeatherPage.vue -->
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import api from '../utils/api.js'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -42,7 +43,6 @@ const availableMeasurements = [
 
 ]
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 const REFRESH_INTERVAL = 300000 // 5 minutes
 const GEOCODING_DELAY = 1000 // Rate limiting for geocoding API
 
@@ -341,12 +341,7 @@ async function fetchDevices() {
     const devicePromises = availableMeasurements.map(async (device) => {
       try {
         //const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=60&measurement=${device.measurement}`)
-        const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=60&measurement=${device.measurement}`, {
-          credentials: 'include'
-        })
-        if (!res.ok) return null
-        
-        const data = await res.json()
+        const data = await api.get(`/api/weather/forecast/?minutes=60&measurement=${device.measurement}`)
         if (!Array.isArray(data) || data.length === 0) return null
         
         // Get the latest reading (last item in array)
@@ -397,13 +392,7 @@ async function fetchWeatherData(measurement = 'Sensor_S6000U_data2') {
     loading.value = true
     error.value = ''
     
-    const res = await fetch(`${API_BASE}/api/weather/forecast/?minutes=60&measurement=${measurement}`, {
-      credentials: 'include'
-    })
-    
-    if (!res.ok) throw new Error(`API Error: ${res.status} ${res.statusText}`)
-    
-    const data = await res.json()
+    const data = await api.get(`/api/weather/forecast/?minutes=60&measurement=${measurement}`)
 
     if (!Array.isArray(data) || data.length === 0) {
       throw new Error('No weather data available')
