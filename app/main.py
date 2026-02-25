@@ -9,7 +9,7 @@ from app.database import init_firebase
 import os
 from google import genai
 from app.config import GROQ_API_KEY
-
+from fastapi.staticfiles import StaticFiles
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -43,6 +43,7 @@ app.include_router(weather_router, prefix="/api/weather", tags=["weather"])
 app.include_router(rag_router, prefix="/api/rag", tags=["AI Assistant"])
 app.include_router(auth_router)
 
+app.mount("/static/web-app", StaticFiles(directory="static/web-app", html=True), name="web-app")
 
 @app.get("/health", include_in_schema=False)
 async def health():

@@ -104,7 +104,7 @@ export async function apiRequest(endpoint, options = {}) {
       localStorage.removeItem("accessToken");
       localStorage.removeItem("userSession");
       localStorage.removeItem("sessionSavedAt");
-      window.location.href = "http://localhost:5500/web-app/src/login.html";
+      window.location.href = `${userPrefix}/web-app/src/login.html`;
       throw new Error("Session expired. Please login again.");
     }
 

@@ -247,7 +247,7 @@ export function isAuthenticated() {
  */
 export function requireAuth() {
   if (!isAuthenticated()) {
-    //window.location.href = "http://localhost:5500/web-app/src/login.html";
+    //window.location.href = `${userPrefix}/web-app/src/login.html`;
     console.warn("User not authenticated. Redirecting to login.");
     return false;
   }
@@ -264,18 +264,18 @@ export async function logout() {
 
     notifyLogoutTo5500();
     setTimeout(() => {
-      window.location.href = "http://localhost:5500/web-app/src/login.html";
+      window.location.href = `${userPrefix}/web-app/src/login.html`;
     }, 500);
   } catch (error) {
     console.error("Logout error:", error);
-    window.location.href = "http://localhost:5500/web-app/src/login.html";
+    window.location.href = `${userPrefix}/web-app/src/login.html`;
   }
 }
 
 function notifyLogoutTo5500() {
   try {
     // Method 1: Create a hidden iframe to trigger logout on 5500
-    const logoutUrl = "http://localhost:5500/web-app/src/logout.html";
+    const logoutUrl = `${userPrefix}/web-app/src/logout.html`;
     const iframe = document.createElement("iframe");
     iframe.src = logoutUrl;
     iframe.style.display = "none";
@@ -284,7 +284,7 @@ function notifyLogoutTo5500() {
       // Send message to iframe to trigger logout
       iframe.contentWindow.postMessage(
         { type: "LOGOUT_FROM_5173" },
-        "http://localhost:5500",
+        userPrefix,
       );
 
       // Remove iframe after a short delay
