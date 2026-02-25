@@ -1,4 +1,7 @@
 import { auth, userDatabase } from "./firebase.js";
+
+window.userPrefix = window.WEBAPP_PUBLIC_PREFIX || "http://localhost:8081";
+const userPrefix = window.userPrefix;
 import {
   doc,
   getDoc,
@@ -255,37 +258,34 @@ export function requireAuth() {
 }
 
 /**
- * Logout - clear all session data, notify 5500, and redirect to login
+ * Logout - clear all session data, notify web app, and redirect to login
  */
 export async function logout() {
   try {
     localStorage.clear();
     console.log("Local storage cleared");
 
-    notifyLogoutTo5500();
+    notifyLogoutToWebApp();
     setTimeout(() => {
-      window.location.href = `${userPrefix}/web-app/src/login.html`;
+      window.location.href = `${userPrefix}/src/login.html`;
     }, 500);
   } catch (error) {
     console.error("Logout error:", error);
-    window.location.href = `${userPrefix}/web-app/src/login.html`;
+    window.location.href = `${userPrefix}/src/login.html`;
   }
 }
 
-function notifyLogoutTo5500() {
+function notifyLogoutToWebApp() {
   try {
-    // Method 1: Create a hidden iframe to trigger logout on 5500
-    const logoutUrl = `${userPrefix}/web-app/src/logout.html`;
+    // Create a hidden iframe to trigger logout on the web-app (dynamic prefix)
+    const logoutUrl = `${userPrefix}/logout.html`;
     const iframe = document.createElement("iframe");
     iframe.src = logoutUrl;
     iframe.style.display = "none";
     iframe.className = "logout-frame";
     iframe.onload = () => {
-      // Send message to iframe to trigger logout
-      iframe.contentWindow.postMessage(
-        { type: "LOGOUT_FROM_5173" },
-        userPrefix,
-      );
+      // Optionally, send a message to the iframe if needed
+      // iframe.contentWindow.postMessage({ type: "LOGOUT_FROM_ADMIN" }, userPrefix);
 
       // Remove iframe after a short delay
       setTimeout(() => {
@@ -296,8 +296,8 @@ function notifyLogoutTo5500() {
     };
     document.body.appendChild(iframe);
 
-    console.log("Logout notification sent to port 5500");
+    console.log("Logout notification sent to web-app");
   } catch (error) {
-    console.error("Error notifying port 5500 of logout:", error);
+    console.error("Error notifying web-app of logout:", error);
   }
 }
