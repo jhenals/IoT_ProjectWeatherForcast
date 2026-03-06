@@ -44,8 +44,6 @@ app.include_router(weather_router, prefix="/api/weather", tags=["weather"])
 app.include_router(rag_router, prefix="/api/rag", tags=["AI Assistant"])
 app.include_router(auth_router)
 
-app.mount("/static/web-app", StaticFiles(directory="static/web-app", html=True), name="web-app")
-
 @app.get("/health", include_in_schema=False)
 async def health():
     return {"status": "ok", "version": "1.1.0"}
